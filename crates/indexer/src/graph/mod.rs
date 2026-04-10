@@ -4,6 +4,7 @@ pub use explain_result::ExplainResult;
 
 use crate::model::SemanticGraph;
 
+#[soul(id = "indexer.explain", role = "implementation")]
 pub fn explain(graph: &SemanticGraph, id: &str) -> ExplainResult {
     let documents = graph
         .documents

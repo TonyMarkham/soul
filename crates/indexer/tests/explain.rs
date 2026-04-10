@@ -1,10 +1,25 @@
 use std::{fs, process::Command};
 use tempfile::tempdir;
 
+const TEST_CONFIG: &str = "\
+[scan]
+excluded_dirs = [\".git\", \".soul\", \"target\", \".idea\", \".vscode\", \".vs\", \".codex\", \"node_modules\", \"obj\"]
+excluded_dir_suffixes = [\"Tests\", \".Tests\"]
+excluded_bin_except_under = [\"src\"]
+annotation_extensions = [\"rs\", \"cs\"]
+";
+
+fn write_test_config(root: &std::path::Path) {
+    let soul_dir = root.join(".soul");
+    fs::create_dir_all(&soul_dir).expect(".soul dir");
+    fs::write(soul_dir.join("soul.toml"), TEST_CONFIG).expect("soul.toml");
+}
+
 #[test]
 fn explain_command_prints_matches_and_diagnostics() {
     let root = tempdir().expect("tempdir");
 
+    write_test_config(root.path());
     fs::create_dir_all(root.path().join(".docs/interactions")).expect("docs dir");
     fs::create_dir_all(root.path().join("fixtures")).expect("fixtures dir");
 
@@ -107,6 +122,7 @@ Diagnostics:
 fn explain_command_returns_zero_for_missing_id() {
     let root = tempdir().expect("tempdir");
 
+    write_test_config(root.path());
     let output = Command::new(env!("CARGO_BIN_EXE_indexer"))
         .args([
             "explain",

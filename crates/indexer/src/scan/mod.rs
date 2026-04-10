@@ -4,6 +4,7 @@ mod scan_candidate;
 use crate::{
     IndexerError, IndexerResult,
     annotation::parse_annotations,
+    config::SoulConfig,
     markdown::parse_markdown,
     model::{Diagnostic, DiagnosticSeverity, SemanticGraph},
     scan::{candidate_kind::CandidateKind, scan_candidate::ScanCandidate},
@@ -12,11 +13,12 @@ use crate::{
 use std::{
     fs,
     io::ErrorKind,
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
 };
 use walkdir::{DirEntry, WalkDir};
 
-pub fn scan_repository(root: &Path) -> IndexerResult<SemanticGraph> {
+#[soul(id = "indexer.scan-repository", role = "implementation")]
+pub fn scan_repository(root: &Path, config: &SoulConfig) -> IndexerResult<SemanticGraph> {
     if !root.exists() || !root.is_dir() {
         return Err(IndexerError::invalid_root(root.to_path_buf()));
     }
@@ -25,7 +27,7 @@ pub fn scan_repository(root: &Path) -> IndexerResult<SemanticGraph> {
 
     for entry in WalkDir::new(root)
         .into_iter()
-        .filter_entry(|entry| !is_excluded_dir(root, entry))
+        .filter_entry(|entry| !is_excluded_dir(root, entry, config))
     {
         let entry = entry.map_err(|error| {
             IndexerError::walk_entry(
@@ -44,7 +46,7 @@ pub fn scan_repository(root: &Path) -> IndexerResult<SemanticGraph> {
         }
 
         let path = entry.path();
-        let Some(candidate) = classify_path(root, path) else {
+        let Some(candidate) = classify_path(root, path, config) else {
             continue;
         };
 
@@ -116,61 +118,57 @@ pub fn scan_repository(root: &Path) -> IndexerResult<SemanticGraph> {
     Ok(graph)
 }
 
-fn is_excluded_dir(root: &Path, entry: &DirEntry) -> bool {
-    if !entry.file_type().is_dir() {
+fn is_excluded_dir(root: &Path, entry: &DirEntry, config: &SoulConfig) -> bool {
+    if !entry.file_type().is_dir() || entry.path() == root {
         return false;
     }
 
-    if entry.path() == root {
-        return false;
-    }
-
-    let Some(relative_path) = entry.path().strip_prefix(root).ok() else {
+    let Some(name) = entry.file_name().to_str() else {
         return false;
     };
 
-    let under_docs = matches!(
-        relative_path.components().next(),
-        Some(Component::Normal(name)) if name == ".docs"
-    );
+    if config.scan.excluded_dirs.iter().any(|d| d == name) {
+        return true;
+    }
 
-    let parent_name = entry
-        .path()
-        .parent()
-        .and_then(|path| path.file_name())
-        .and_then(|name| name.to_str());
+    if config
+        .scan
+        .excluded_dir_suffixes
+        .iter()
+        .any(|s| name.ends_with(s.as_str()))
+    {
+        return true;
+    }
 
-    let file_name = entry.file_name().to_str();
+    if name == "bin" {
+        let parent_name = entry
+            .path()
+            .parent()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str());
+        return !parent_name
+            .is_some_and(|p| config.scan.excluded_bin_except_under.iter().any(|s| s == p));
+    }
 
-    matches!(
-        file_name,
-        Some(".git" | "target" | ".idea" | ".vscode" | ".vs" | ".codex" | "node_modules" | "obj")
-    ) || matches!(file_name, Some(name) if (name == "tests" || name == "Tests" || name.ends_with(".Tests")))
-        && !under_docs
-        || matches!(file_name, Some("bin")) && parent_name.is_some_and(|name| name != "src")
+    false
 }
 
-fn classify_path(root: &Path, path: &Path) -> Option<ScanCandidate> {
+fn classify_path(root: &Path, path: &Path, config: &SoulConfig) -> Option<ScanCandidate> {
     let display_path = path.strip_prefix(root).ok()?.to_path_buf();
 
     match path.extension().and_then(|ext| ext.to_str()) {
-        Some("md") if is_indexable_doc(&display_path) => Some(ScanCandidate {
+        Some("md") => Some(ScanCandidate {
             display_path,
             kind: CandidateKind::Document,
         }),
-        Some("rs" | "cs") => Some(ScanCandidate {
-            display_path,
-            kind: CandidateKind::AnnotationSource,
-        }),
+        Some(ext) if config.scan.annotation_extensions.iter().any(|e| e == ext) => {
+            Some(ScanCandidate {
+                display_path,
+                kind: CandidateKind::AnnotationSource,
+            })
+        }
         _ => None,
     }
-}
-
-fn is_indexable_doc(path: &Path) -> bool {
-    matches!(
-        path.components().next(),
-        Some(Component::Normal(name)) if name == ".docs"
-    )
 }
 
 fn read_failure_diagnostic(path: &Path, kind: ErrorKind, source: std::io::Error) -> Diagnostic {

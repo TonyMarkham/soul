@@ -4,6 +4,9 @@ pub mod graph;
 pub mod markdown;
 pub mod model;
 
+pub mod config;
+pub mod constants;
+pub mod index;
 pub mod scan;
 #[cfg(test)]
 pub mod tests;

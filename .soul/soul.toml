@@ -1,0 +1,17 @@
+[scan]
+  excluded_dirs = [
+      ".git",
+      ".soul",
+      "target",
+      ".idea",
+      ".vscode",
+      ".vs",
+      ".codex",
+      "node_modules",
+      "obj",
+      ".archive",
+      ".claude"
+  ]
+  excluded_dir_suffixes = ["Tests", ".Tests", "tests"]
+  excluded_bin_except_under = ["src"]
+  annotation_extensions = ["rs", "cs"]

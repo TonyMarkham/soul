@@ -23,7 +23,7 @@
 
 ## Audit
 ```text
-- Read `VS-10.md`
+- Read `VS-20.md`
 - Audit it against the current repository code
 ```
 

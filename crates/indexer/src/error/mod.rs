@@ -24,6 +24,30 @@ pub enum IndexerError {
         message: String,
         location: ErrorLocation,
     },
+
+    #[error("{location} failed to read config `{path}`: {source}")]
+    ConfigRead {
+        path: PathBuf,
+        location: ErrorLocation,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("{location} failed to parse config `{path}`: {source}")]
+    ConfigParse {
+        path: PathBuf,
+        location: ErrorLocation,
+        #[source]
+        source: Box<toml::de::Error>,
+    },
+
+    #[error("{location} index db error at `{path}`: {source}")]
+    IndexDb {
+        path: PathBuf,
+        location: ErrorLocation,
+        #[source]
+        source: sqlx::Error,
+    },
 }
 
 impl IndexerError {
@@ -49,6 +73,33 @@ impl IndexerError {
         Self::Cli {
             message: message.into(),
             location: ErrorLocation::from(Location::caller()),
+        }
+    }
+
+    #[track_caller]
+    pub fn config_read(path: PathBuf, source: std::io::Error) -> Self {
+        Self::ConfigRead {
+            path,
+            location: ErrorLocation::from(Location::caller()),
+            source,
+        }
+    }
+
+    #[track_caller]
+    pub fn config_parse(path: PathBuf, source: toml::de::Error) -> Self {
+        Self::ConfigParse {
+            path,
+            location: ErrorLocation::from(Location::caller()),
+            source: Box::new(source),
+        }
+    }
+
+    #[track_caller]
+    pub fn index_db(path: PathBuf, source: sqlx::Error) -> Self {
+        Self::IndexDb {
+            path,
+            location: ErrorLocation::from(Location::caller()),
+            source,
         }
     }
 }

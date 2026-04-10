@@ -4,7 +4,29 @@ use std::path::PathBuf;
 use std::os::unix::fs::PermissionsExt;
 use tempfile::tempdir;
 
+use crate::config::{ScanConfig, SoulConfig};
 use crate::scan::scan_repository;
+
+fn test_config() -> SoulConfig {
+    SoulConfig {
+        scan: ScanConfig {
+            excluded_dirs: vec![
+                ".git".into(),
+                ".soul".into(),
+                "target".into(),
+                ".idea".into(),
+                ".vscode".into(),
+                ".vs".into(),
+                ".codex".into(),
+                "node_modules".into(),
+                "obj".into(),
+            ],
+            excluded_dir_suffixes: vec!["Tests".into(), ".Tests".into()],
+            excluded_bin_except_under: vec!["src".into()],
+            annotation_extensions: vec!["rs".into(), "cs".into()],
+        },
+    }
+}
 
 #[test]
 fn scans_only_supported_paths_and_keeps_relative_display_paths_stable() {
@@ -45,23 +67,13 @@ title: Test doc
 
     fs::write(
         root.path().join("README.md"),
-        "\
----
-id: ignored.readme
-kind: interaction
----
-",
+        "This is a readme with no frontmatter.\n",
     )
     .expect("ignored readme");
 
     fs::write(
         root.path().join(".docs-old/rogue.md"),
-        "\
----
-id: ignored.docs.old
-kind: interaction
----
-",
+        "No frontmatter here.\n",
     )
     .expect("ignored docs sibling");
 
@@ -117,7 +129,7 @@ kind: interaction
     )
     .expect("ignored");
 
-    let graph = scan_repository(root.path()).expect("scan");
+    let graph = scan_repository(root.path(), &test_config()).expect("scan");
 
     assert_eq!(graph.documents.len(), 2);
     assert_eq!(graph.annotations.len(), 3);
@@ -169,7 +181,7 @@ title: Create order
     )
     .expect("annotation");
 
-    let graph = scan_repository(&root).expect("scan");
+    let graph = scan_repository(&root, &test_config()).expect("scan");
 
     assert_eq!(graph.documents.len(), 1);
     assert_eq!(graph.annotations.len(), 1);
@@ -207,7 +219,7 @@ title: Second
     )
     .expect("second doc");
 
-    let graph = scan_repository(root.path()).expect("scan");
+    let graph = scan_repository(root.path(), &test_config()).expect("scan");
 
     assert_eq!(graph.documents.len(), 1);
     assert_eq!(graph.documents[0].path, PathBuf::from(".docs/a/first.md"));
@@ -229,7 +241,7 @@ fn returns_a_fatal_walk_error_for_inaccessible_nested_directories() {
     fs::create_dir_all(&blocked).expect("blocked dir");
     fs::set_permissions(&blocked, fs::Permissions::from_mode(0o000)).expect("chmod");
 
-    let error = scan_repository(root.path()).expect_err("walk error");
+    let error = scan_repository(root.path(), &test_config()).expect_err("walk error");
 
     match error {
         crate::IndexerError::WalkEntry { path, .. } => {
@@ -270,7 +282,7 @@ fn unreadable() {}"#,
     .expect("unreadable file");
     fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o000)).expect("chmod");
 
-    let graph = scan_repository(root.path()).expect("scan");
+    let graph = scan_repository(root.path(), &test_config()).expect("scan");
 
     assert_eq!(graph.documents.len(), 1);
     assert!(graph.diagnostics.iter().any(|diagnostic| {
