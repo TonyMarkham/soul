@@ -5,6 +5,7 @@ edition.workspace = true
 repository.workspace = true
 description = "Proc-macro attributes for annotating code with Soul semantic IDs"
 license = "MIT"
+readme = "README.md"
 
 [lib]
 proc-macro = true
