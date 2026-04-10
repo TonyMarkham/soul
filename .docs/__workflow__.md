@@ -1,8 +1,10 @@
 ## `optimize-plan` call
 ```text
-/online-entity-cc-plugin:optimize-plan VS-20.md
+/online-entity-cc-plugin:optimize-plan VS-30.md
 **NOTE** Assume that cargo check/clippy/build/test are all clean
 **NOTE** Assume that dotnet build/test/publish are all clean
+
+**CRITICAL** The plan NEEDS to contain a FULL IMPLEMENTATION PLAN with ZERO gaps
 ```
 
 ---

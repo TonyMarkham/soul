@@ -8,6 +8,7 @@ repository.workspace = true
 clap            = { workspace = true }
 error-location  = { workspace = true }
 libsqlite3-sys  = { workspace = true }
+rmcp            = { workspace = true }
 serde           = { workspace = true }
 serde_json      = { workspace = true }
 serde_yaml      = { workspace = true }
