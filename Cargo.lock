@@ -665,7 +665,7 @@ dependencies = [
 
 [[package]]
 name = "indexer"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "clap",
  "error-location",
@@ -1254,7 +1254,7 @@ dependencies = [
 
 [[package]]
 name = "soul-attributes"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "error-location",
  "quote",

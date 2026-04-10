@@ -7,5 +7,15 @@
     <PackageId>Soul.Attributes</PackageId>
     <AssemblyName>Soul.Attributes</AssemblyName>
     <RootNamespace>Soul.Attributes</RootNamespace>
+    <Version>0.1.1</Version>
+    <Description>Attribute for annotating code with Soul semantic IDs.</Description>
+    <Authors>Tony Markham</Authors>
+    <RepositoryUrl>https://github.com/TonyMarkham/soul</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 </Project>
