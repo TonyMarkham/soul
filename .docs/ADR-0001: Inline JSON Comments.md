@@ -1,8 +1,8 @@
-# ADR-0001: Repo-Soul Annotation Strategy (Inline JSON Comments)
+# ADR-0001: Repo-Soul Annotation Strategy (Code-Native Attributes)
 
 ## Status
 
-Accepted
+Superseded — original decision (inline JSON comments) was replaced during implementation. Code-native attributes were chosen instead.
 
 ## Context
 
@@ -32,133 +32,80 @@ Key constraints:
 
 ## Decision
 
-Annotations will be implemented as **single-line structured comments using inline JSON**, prefixed with `@soul`.
+Annotations are implemented as **code-native attributes** using a `soul-attributes` proc-macro crate (Rust) and a `[Soul(...)]` attribute (C#).
 
 ### Format
 
-Rust / C#:
+Rust:
 
+```rust
+#[soul(id = "interaction.checkout.create-order", role = "backend")]
+async fn create_order(...) {}
 ```
-// @soul {"id":"interaction.checkout.create-order","role":"backend"}
+
+C#:
+
+```csharp
+[Soul("interaction.checkout.create-order", Role = "frontend")]
+public partial class CheckoutPage : ComponentBase {}
 ```
 
 ### Rules
 
-1. **Single-line only**
+1. **Primary Identifier**
 
-    * Each `@soul` annotation must exist entirely on one line
-    * Multi-line annotations are not supported
+    * Each annotation must include an `id` field
 
-2. **Strict JSON**
+2. **Role field**
 
-    * Must be valid JSON
-    * Double quotes required
-    * No trailing commas
+    * Optional; indicates the symbol's role relative to the linked concept
 
-3. **Prefix**
+3. **Additional metadata**
 
-    * Must begin with `// @soul`
-    * Anything else is ignored
+    * Extra key-value pairs may be attached as named arguments
 
-4. **Primary Identifier**
+4. **Multiple annotations allowed**
 
-    * Each annotation should include an `id` field when defining a primary relationship
-
-5. **Multiple annotations allowed**
-
-    * Multiple `@soul` lines may be attached to the same symbol
-
-Example:
-
-```rust
-// @soul {"id":"interaction.checkout.create-order","role":"backend"}
-async fn create_order(...) {}
-```
-
-```csharp
-// @soul {"id":"interaction.checkout.create-order","role":"frontend"}
-public partial class CheckoutPage : ComponentBase {}
-```
+    * Multiple `@soul` attributes may be attached to the same symbol
 
 ## Rationale
 
-### Why not attributes/macros?
+### Why not inline JSON comments?
 
-* Require language-specific packages (Rust crate, NuGet)
-* Introduce compile-time coupling
-* May leak into compiled artifacts
-* Slower to iterate in early stages
+* Comments are invisible to the compiler — no validation at build time
+* Harder to tooling-assist (no autocomplete, no refactor support)
+* Annotation intent is clearer expressed as a language construct
 
-### Why not multi-line blocks?
+### Why code-native attributes?
 
-* Require stateful parsing
-* Introduce grouping ambiguity
-* More fragile under formatting tools
-* Harder to refactor safely
-
-### Why not YAML/TOML in comments?
-
-* Harder to keep atomic
-* More verbose
-* Less consistent across languages
-
-### Why inline JSON?
-
-* **Atomic**: one line = one record
-* **Deterministic parsing**: trivial to extract
-* **Language-agnostic**
-* **Easy to validate**
-* **Resilient to formatting (when wrap_comments = false)**
-* **Maps cleanly to internal data structures**
+* **Compiler-checked**: malformed annotations are caught at build time
+* **IDE-friendly**: hover, autocomplete, and refactoring work naturally
+* **Idiomatic**: matches how developers already annotate code (derives, cfg, etc.)
+* **Strongly typed**: the `soul-attributes` proc-macro validates structure at compile time
+* **Refactor-safe**: tools that rename symbols naturally carry attributes with them
 
 ## Consequences
 
 ### Positive
 
-* Extremely simple parsing logic
-* No compiler/toolchain dependency
-* Fast to implement (ideal for Slice 1)
-* Works uniformly across Rust, C#, and future languages
-* Easy for LLMs to generate and modify
-* Easy to hash and diff for change detection
+* Compile-time validation of annotation structure
+* IDE support (autocomplete, go-to-definition on attribute fields)
+* Familiar syntax for Rust/C# developers
+* Refactor-safe: symbol renames carry attributes
 
 ### Negative
 
-* Less ergonomic than native attributes
-* No compile-time validation
-* Can become long/unwieldy with many fields
-* Requires discipline to keep JSON valid
-
-### Mitigations
-
-* Indexer will:
-
-    * Validate JSON
-    * Emit diagnostics for malformed annotations
-    * Ignore invalid entries safely
-
-* Repository will enforce:
-
-```toml
-# rustfmt.toml
-wrap_comments = false
-```
-
-* Keep annotations small and focused
+* Language-specific packages required (`soul-attributes` crate, future C# NuGet)
+* Slightly more coupling than comment-based approach
+* LLMs must know the attribute syntax (vs. freeform JSON)
 
 ## Future Evolution
 
-This approach is intentionally minimal and may evolve.
-
-Possible future upgrades:
-
-* Introduce Rust/C# attribute packages for stronger typing
-* Add LSP validation and autocomplete for JSON fields
-* Introduce schema validation for annotation content
+* Add LSP validation and autocomplete for attribute field values
+* Introduce schema validation for known `id` values
 * Support code actions for inserting/editing annotations
-* Add refactor-safe ID rename across annotations
-
-The inline JSON format is compatible with future migration to attributes.
+* Add refactor-safe ID rename across annotations and docs
+* Publish `soul-attributes` as a standalone crate/NuGet for consumer repos
 
 ## Related Decisions
 
@@ -167,6 +114,6 @@ The inline JSON format is compatible with future migration to attributes.
 
 ## Summary
 
-Use **inline JSON in single-line comments (`// @soul {...}`)** as the initial annotation mechanism to connect code to repo-level semantic concepts.
+Use **code-native attributes (`#[soul(...)]` / `[Soul(...)]`)** as the annotation mechanism to connect code to repo-level semantic concepts.
 
-This provides the simplest, most robust foundation for building the repo-soul system across LSP, MCP, and indexing layers.
+This provides compile-time validation, IDE integration, and idiomatic developer ergonomics across the LSP, MCP, and indexing layers.

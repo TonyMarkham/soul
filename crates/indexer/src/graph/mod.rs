@@ -1,8 +1,14 @@
 pub mod explain_result;
 
+// ---------------------------------------------------------------------------------------------- //
+
 pub use explain_result::ExplainResult;
 
+// ---------------------------------------------------------------------------------------------- //
+
 use crate::model::SemanticGraph;
+
+use soul_attributes::soul;
 
 #[soul(id = "indexer.explain", role = "implementation")]
 pub fn explain(graph: &SemanticGraph, id: &str) -> ExplainResult {

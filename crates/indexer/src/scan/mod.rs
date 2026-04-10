@@ -1,6 +1,8 @@
 mod candidate_kind;
 mod scan_candidate;
 
+// ---------------------------------------------------------------------------------------------- //
+
 use crate::{
     IndexerError, IndexerResult,
     annotation::parse_annotations,
@@ -10,6 +12,7 @@ use crate::{
     scan::{candidate_kind::CandidateKind, scan_candidate::ScanCandidate},
 };
 
+use soul_attributes::soul;
 use std::{
     fs,
     io::ErrorKind,
