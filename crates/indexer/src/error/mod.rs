@@ -1,0 +1,56 @@
+pub mod annotation;
+
+use error_location::ErrorLocation;
+use std::{panic::Location, path::PathBuf, result::Result as StdResult};
+
+#[derive(Debug, thiserror::Error)]
+pub enum IndexerError {
+    #[error("root does not exist or is not a directory: {path}")]
+    InvalidRoot {
+        path: PathBuf,
+        location: ErrorLocation,
+    },
+
+    #[error("failed to walk path {path}: {source}")]
+    WalkEntry {
+        path: PathBuf,
+        location: ErrorLocation,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("{message}")]
+    Cli {
+        message: String,
+        location: ErrorLocation,
+    },
+}
+
+impl IndexerError {
+    #[track_caller]
+    pub fn invalid_root(path: PathBuf) -> Self {
+        Self::InvalidRoot {
+            path,
+            location: ErrorLocation::from(Location::caller()),
+        }
+    }
+
+    #[track_caller]
+    pub fn walk_entry(path: PathBuf, source: std::io::Error) -> Self {
+        Self::WalkEntry {
+            path,
+            location: ErrorLocation::from(Location::caller()),
+            source,
+        }
+    }
+
+    #[track_caller]
+    pub fn cli(message: impl Into<String>) -> Self {
+        Self::Cli {
+            message: message.into(),
+            location: ErrorLocation::from(Location::caller()),
+        }
+    }
+}
+
+pub type IndexerResult<T> = StdResult<T, IndexerError>;

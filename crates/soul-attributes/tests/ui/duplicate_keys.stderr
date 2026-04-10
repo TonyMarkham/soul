@@ -1,0 +1,5 @@
+error: duplicate soul attribute field `id`
+ --> tests/ui/duplicate_keys.rs:3:8
+  |
+3 | #[soul(id = "interaction.checkout.create-order", id = "duplicate")]
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

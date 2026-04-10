@@ -1,0 +1,19 @@
+# Rust
+/target/
+
+# .NET
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+.vs/
+*.swp
+
+# JetBrains IDEs
+.idea/
+
+# macOS
+.DS_Store
+
+# Node
+node_modules/

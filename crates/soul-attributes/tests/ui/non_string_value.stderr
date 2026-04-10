@@ -1,0 +1,5 @@
+error: soul attribute values must be string literals
+ --> tests/ui/non_string_value.rs:3:8
+  |
+3 | #[soul(id = "interaction.checkout.create-order", role = 42)]
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

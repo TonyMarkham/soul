@@ -1,0 +1,5 @@
+error: expected identifier
+ --> tests/ui/non_identifier_key.rs:3:50
+  |
+3 | #[soul(id = "interaction.checkout.create-order", "bad-key" = "value")]
+  |                                                  ^^^^^^^^^

@@ -1,0 +1,5 @@
+error: soul attribute value for `id` must not be empty
+ --> tests/ui/empty_required_value.rs:3:8
+  |
+3 | #[soul(id = "   ")]
+  |        ^^^^^^^^^^
