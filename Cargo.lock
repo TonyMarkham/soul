@@ -813,7 +813,6 @@ version = "0.1.2"
 dependencies = [
  "clap",
  "error-location",
- "libsqlite3-sys",
  "rmcp",
  "serde",
  "serde_json",

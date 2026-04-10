@@ -48,6 +48,13 @@ pub enum IndexerError {
         #[source]
         source: sqlx::Error,
     },
+
+    #[error("{location} mcp error: {source}")]
+    Mcp {
+        location: ErrorLocation,
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
 }
 
 impl IndexerError {
@@ -100,6 +107,14 @@ impl IndexerError {
             path,
             location: ErrorLocation::from(Location::caller()),
             source,
+        }
+    }
+
+    #[track_caller]
+    pub fn mcp(source: impl std::error::Error + Send + Sync + 'static) -> Self {
+        Self::Mcp {
+            location: ErrorLocation::from(Location::caller()),
+            source: Box::new(source),
         }
     }
 }

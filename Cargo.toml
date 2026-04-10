@@ -13,8 +13,6 @@ repository = "https://github.com/TonyMarkham/soul"
 [workspace.dependencies]
 clap           = { version = "4.6.0", features = ["derive"] }
 error-location = { version = "0.1.0" }
-# ** CTITICAL **  libsqlite3-sys  MUST use v0.30
-libsqlite3-sys = { version = "0.30.1", features = ["bundled-sqlcipher"] }
 proc-macro2    = { version = "1.0.106" }
 quote          = { version = "1.0.45" }
 rmcp           = { version = "1.4.0", features = ["server", "transport-io"] }
