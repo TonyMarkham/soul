@@ -13,10 +13,8 @@ pub mod scan;
 #[cfg(test)]
 pub mod tests;
 
-pub use error::{
-    IndexerError, IndexerResult,
-    annotation::{AnnotationError, AnnotationResult},
-};
+pub use annotation::loader::PluginRegistry;
+pub use error::{IndexerError, IndexerResult};
 pub use graph::{ExplainResult, explain};
 pub use mcp::SoulServer;
 pub use model::{CodeAnnotation, Diagnostic, DiagnosticSeverity, Document, SemanticGraph};

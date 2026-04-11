@@ -1,18 +1,44 @@
 use std::{fs, process::Command};
 use tempfile::tempdir;
 
-const TEST_CONFIG: &str = "\
-[scan]
-excluded_dirs = [\".git\", \".soul\", \"target\", \".idea\", \".vscode\", \".vs\", \".codex\", \"node_modules\", \"obj\"]
-excluded_dir_suffixes = [\"Tests\", \".Tests\"]
-excluded_bin_except_under = [\"src\"]
-annotation_extensions = [\"rs\", \"cs\"]
-";
-
 fn write_test_config(root: &std::path::Path) {
     let soul_dir = root.join(".soul");
     fs::create_dir_all(&soul_dir).expect(".soul dir");
-    fs::write(soul_dir.join("soul.toml"), TEST_CONFIG).expect("soul.toml");
+
+    let target_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap() // crates/
+        .parent()
+        .unwrap() // workspace root
+        .join("target/debug");
+
+    let rust_lib = target_dir.join(format!(
+        "libsoul_plugin_rust{}",
+        std::env::consts::DLL_SUFFIX
+    ));
+    let csharp_lib = target_dir.join(format!(
+        "libsoul_plugin_csharp{}",
+        std::env::consts::DLL_SUFFIX
+    ));
+
+    let config = format!(
+        "[scan]\n\
+        excluded_dirs = [\".git\", \".soul\", \"target\", \".idea\", \".vscode\", \".vs\", \".codex\", \"node_modules\", \"obj\"]\n\
+        excluded_dir_suffixes = [\"Tests\", \".Tests\"]\n\
+        excluded_bin_except_under = [\"src\"]\n\
+        \n\
+        [[plugins]]\n\
+        language = \"rust\"\n\
+        path = \"{rust_lib}\"\n\
+        \n\
+        [[plugins]]\n\
+        language = \"csharp\"\n\
+        path = \"{csharp_lib}\"\n",
+        rust_lib = rust_lib.display(),
+        csharp_lib = csharp_lib.display(),
+    );
+
+    fs::write(soul_dir.join("soul.toml"), config).expect("soul.toml");
 }
 
 #[test]
@@ -39,7 +65,7 @@ title: Create order
         root.path().join("fixtures/backend.rs"),
         r#"use soul_attributes::soul;
 
-#[soul(id = "interaction.checkout.create-order", role = "backend")]
+#[soul(id = "interaction.checkout.create-order")]
 pub fn create_order() {
 }
 "#,
@@ -52,7 +78,7 @@ pub fn create_order() {
 
 public class CheckoutController
 {
-    [Soul("interaction.checkout.create-order", Role = "frontend")]
+    [Soul("interaction.checkout.create-order")]
     public void CreateOrder()
     {
     }
@@ -63,7 +89,7 @@ public class CheckoutController
 
     fs::write(
         root.path().join("fixtures/bad.rs"),
-        r#"#[soul(id = "interaction.checkout.create-order", role = )]
+        r#"#[soul(id = "interaction.checkout.create-order", junk = )]
 pub fn broken_annotation() {
 }
 "#,
@@ -107,8 +133,8 @@ Documents:
 - .docs/interactions/checkout.md [kind=interaction, title=Create order]
 
 Annotations:
-- fixtures/backend.rs:3 [role=backend]
-- fixtures/frontend.cs:5 [role=frontend]
+- fixtures/backend.rs:3
+- fixtures/frontend.cs:5
 
 Diagnostics:
 - .docs/interactions/bad.md frontmatter block is missing a closing `---` delimiter

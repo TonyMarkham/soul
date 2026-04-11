@@ -1,7 +1,10 @@
 [workspace]
 members = [
     "crates/indexer",
-    "crates/soul-attributes"
+    "crates/soul-attributes",
+    "crates/soul-plugin-sdk",
+    "crates/soul-plugin-rust",
+    "crates/soul-plugin-csharp",
 ]
 resolver = "3"
 
@@ -11,6 +14,7 @@ edition = "2024"
 repository = "https://github.com/TonyMarkham/soul"
 
 [workspace.dependencies]
+abi_stable     = { version = "0.11.3" }
 clap           = { version = "4.6.0", features = ["derive"] }
 error-location = { version = "0.1.0" }
 proc-macro2    = { version = "1.0.106" }
@@ -30,3 +34,4 @@ trybuild       = { version = "1.0.116" }
 walkdir        = { version = "2.5.0" }
 
 soul-attributes = { path = "crates/soul-attributes" }
+soul-plugin-sdk = { path = "crates/soul-plugin-sdk" }

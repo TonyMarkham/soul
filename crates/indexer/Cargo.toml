@@ -5,6 +5,7 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+abi_stable      = { workspace = true }
 clap            = { workspace = true }
 error-location  = { workspace = true }
 rmcp            = { workspace = true }
@@ -19,7 +20,11 @@ toml            = { workspace = true }
 walkdir         = { workspace = true }
 
 soul-attributes = { workspace = true }
+soul-plugin-sdk = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
 tokio    = { workspace = true }
+
+soul-attributes = { workspace = true }
+soul-plugin-sdk = { workspace = true }

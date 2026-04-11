@@ -1,5 +1,3 @@
-pub mod annotation;
-
 use error_location::ErrorLocation;
 use std::{panic::Location, path::PathBuf, result::Result as StdResult};
 
@@ -54,6 +52,28 @@ pub enum IndexerError {
         location: ErrorLocation,
         #[source]
         source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
+    #[error("{location} failed to load plugin `{language}` from `{path}`: {message}")]
+    PluginLoadFailed {
+        language: String,
+        path: PathBuf,
+        message: String,
+        location: ErrorLocation,
+    },
+
+    #[error("{location} duplicate plugin language `{language}`")]
+    DuplicatePluginLanguage {
+        language: String,
+        location: ErrorLocation,
+    },
+
+    #[error("{location} two plugins claim extension `{extension}`: `{first}` and `{second}`")]
+    DuplicatePluginExtension {
+        extension: String,
+        first: String,
+        second: String,
+        location: ErrorLocation,
     },
 }
 
@@ -115,6 +135,34 @@ impl IndexerError {
         Self::Mcp {
             location: ErrorLocation::from(Location::caller()),
             source: Box::new(source),
+        }
+    }
+
+    #[track_caller]
+    pub fn plugin_load(language: String, path: PathBuf, source: impl std::fmt::Display) -> Self {
+        Self::PluginLoadFailed {
+            language,
+            path,
+            message: source.to_string(),
+            location: ErrorLocation::from(Location::caller()),
+        }
+    }
+
+    #[track_caller]
+    pub fn duplicate_plugin_language(language: String) -> Self {
+        Self::DuplicatePluginLanguage {
+            language,
+            location: ErrorLocation::from(Location::caller()),
+        }
+    }
+
+    #[track_caller]
+    pub fn duplicate_plugin_extension(extension: String, first: String, second: String) -> Self {
+        Self::DuplicatePluginExtension {
+            extension,
+            first,
+            second,
+            location: ErrorLocation::from(Location::caller()),
         }
     }
 }

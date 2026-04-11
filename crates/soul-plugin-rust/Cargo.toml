@@ -1,0 +1,15 @@
+[package]
+name = "soul-plugin-rust"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+abi_stable      = { workspace = true }
+serde_json      = { workspace = true }
+syn             = { workspace = true }
+
+soul-plugin-sdk = { workspace = true }

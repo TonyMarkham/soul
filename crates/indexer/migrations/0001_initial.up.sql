@@ -7,7 +7,6 @@ CREATE TABLE documents (
 
 CREATE TABLE annotations (
     id       TEXT NOT NULL,
-    role     TEXT,
     metadata TEXT NOT NULL,
     path     TEXT NOT NULL,
     line     INTEGER NOT NULL,

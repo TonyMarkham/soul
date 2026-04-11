@@ -2,8 +2,8 @@
 /target/
 
 # .NET
-[Bb]in/
-[Oo]bj/
+packages/**/[Bb]in/
+packages/**/[Oo]bj/
 *.user
 *.suo
 .vs/

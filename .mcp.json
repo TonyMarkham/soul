@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "soul": {
+      "type": "stdio",
+      "command": "/Users/tony/git/soul/.soul/indexer",
+      "args": ["serve", "--root", "/Users/tony/git/soul"]
+    }
+  }
+}

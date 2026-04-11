@@ -5,7 +5,7 @@ mod scan_candidate;
 
 use crate::{
     IndexerError, IndexerResult,
-    annotation::parse_annotations,
+    annotation::{PluginRegistry, parse_annotations},
     config::SoulConfig,
     markdown::parse_markdown,
     model::{Diagnostic, DiagnosticSeverity, SemanticGraph},
@@ -13,6 +13,7 @@ use crate::{
 };
 
 use soul_attributes::soul;
+
 use std::{
     fs,
     io::ErrorKind,
@@ -20,8 +21,12 @@ use std::{
 };
 use walkdir::{DirEntry, WalkDir};
 
-#[soul(id = "indexer.scan-repository", role = "implementation")]
-pub fn scan_repository(root: &Path, config: &SoulConfig) -> IndexerResult<SemanticGraph> {
+#[soul(id = "indexer.scan-repository")]
+pub fn scan_repository(
+    root: &Path,
+    config: &SoulConfig,
+    registry: &PluginRegistry,
+) -> IndexerResult<SemanticGraph> {
     if !root.exists() || !root.is_dir() {
         return Err(IndexerError::invalid_root(root.to_path_buf()));
     }
@@ -49,7 +54,7 @@ pub fn scan_repository(root: &Path, config: &SoulConfig) -> IndexerResult<Semant
         }
 
         let path = entry.path();
-        let Some(candidate) = classify_path(root, path, config) else {
+        let Some(candidate) = classify_path(root, path, registry) else {
             continue;
         };
 
@@ -74,7 +79,7 @@ pub fn scan_repository(root: &Path, config: &SoulConfig) -> IndexerResult<Semant
                 graph.diagnostics.extend(report.diagnostics);
             }
             CandidateKind::AnnotationSource => {
-                let report = parse_annotations(&candidate.display_path, &contents)?;
+                let report = parse_annotations(&candidate.display_path, &contents, registry)?;
                 graph.annotations.extend(report.value);
                 graph.diagnostics.extend(report.diagnostics);
             }
@@ -156,7 +161,7 @@ fn is_excluded_dir(root: &Path, entry: &DirEntry, config: &SoulConfig) -> bool {
     false
 }
 
-fn classify_path(root: &Path, path: &Path, config: &SoulConfig) -> Option<ScanCandidate> {
+fn classify_path(root: &Path, path: &Path, registry: &PluginRegistry) -> Option<ScanCandidate> {
     let display_path = path.strip_prefix(root).ok()?.to_path_buf();
 
     match path.extension().and_then(|ext| ext.to_str()) {
@@ -164,12 +169,10 @@ fn classify_path(root: &Path, path: &Path, config: &SoulConfig) -> Option<ScanCa
             display_path,
             kind: CandidateKind::Document,
         }),
-        Some(ext) if config.scan.annotation_extensions.iter().any(|e| e == ext) => {
-            Some(ScanCandidate {
-                display_path,
-                kind: CandidateKind::AnnotationSource,
-            })
-        }
+        Some(ext) if registry.parser_for_extension(ext).is_some() => Some(ScanCandidate {
+            display_path,
+            kind: CandidateKind::AnnotationSource,
+        }),
         _ => None,
     }
 }

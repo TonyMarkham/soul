@@ -10,7 +10,7 @@ use crate::model::SemanticGraph;
 
 use soul_attributes::soul;
 
-#[soul(id = "indexer.explain", role = "implementation")]
+#[soul(id = "indexer.explain")]
 pub fn explain(graph: &SemanticGraph, id: &str) -> ExplainResult {
     let documents = graph
         .documents

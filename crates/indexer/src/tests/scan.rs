@@ -1,14 +1,19 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use std::os::unix::fs::PermissionsExt;
 use tempfile::tempdir;
 
-use crate::config::{ScanConfig, SoulConfig};
-use crate::scan::scan_repository;
+use crate::{
+    annotation::PluginRegistry,
+    config::{ScanConfig, SoulConfig},
+    scan::scan_repository,
+    tests::plugin_helper,
+};
 
-fn test_config() -> SoulConfig {
-    SoulConfig {
+fn test_config_and_registry(root: &Path) -> (SoulConfig, PluginRegistry) {
+    let plugins = plugin_helper::test_plugin_entries();
+    let config = SoulConfig {
         scan: ScanConfig {
             excluded_dirs: vec![
                 ".git".into(),
@@ -23,9 +28,11 @@ fn test_config() -> SoulConfig {
             ],
             excluded_dir_suffixes: vec!["Tests".into(), ".Tests".into()],
             excluded_bin_except_under: vec!["src".into()],
-            annotation_extensions: vec!["rs".into(), "cs".into()],
         },
-    }
+        plugins: plugins.clone(),
+    };
+    let registry = PluginRegistry::load(&plugins, root).expect("load plugins");
+    (config, registry)
 }
 
 #[test]
@@ -81,14 +88,14 @@ title: Test doc
         root.path().join("fixtures/backend.rs"),
         r#"use soul_attributes::soul;
 
-  #[soul(id = "interaction.checkout.create-order", role = "backend")]
+  #[soul(id = "interaction.checkout.create-order")]
   fn create_order() {}"#,
     )
     .expect("annotation");
 
     fs::write(
         root.path().join("fixtures/frontend.cs"),
-        r#"[Soul("interaction.checkout.create-order", Role = "frontend")]
+        r#"[Soul("interaction.checkout.create-order")]
   public void CreateOrder() {}"#,
     )
     .expect("annotation");
@@ -96,7 +103,7 @@ title: Test doc
     fs::write(
         root.path()
             .join("packages/Soul.Attributes.Tests/ignored.cs"),
-        r#"[Soul("ignored.tree", Role = "test")]
+        r#"[Soul("ignored.tree")]
   public void Ignored() {}"#,
     )
     .expect("ignored test package");
@@ -105,14 +112,14 @@ title: Test doc
         root.path().join("src/bin/keep.rs"),
         r#"use soul_attributes::soul;
 
-  #[soul(id = "interaction.checkout.create-order", role = "tooling")]
+  #[soul(id = "interaction.checkout.create-order")]
   fn keep() {}"#,
     )
     .expect("bin annotation");
 
     fs::write(
         root.path().join("fixtures/bad.rs"),
-        r#"#[soul(id = "interaction.checkout.create-order", role = )]"#,
+        r#"#[soul(id = "interaction.checkout.create-order", junk = )]"#,
     )
     .expect("bad annotation");
 
@@ -129,7 +136,8 @@ title: Test doc
     )
     .expect("ignored");
 
-    let graph = scan_repository(root.path(), &test_config()).expect("scan");
+    let (config, registry) = test_config_and_registry(root.path());
+    let graph = scan_repository(root.path(), &config, &registry).expect("scan");
 
     assert_eq!(graph.documents.len(), 2);
     assert_eq!(graph.annotations.len(), 3);
@@ -176,12 +184,13 @@ title: Create order
         root.join("fixtures/backend.rs"),
         r#"use soul_attributes::soul;
 
-  #[soul(id = "interaction.checkout.create-order", role = "backend")]
+  #[soul(id = "interaction.checkout.create-order")]
   fn create_order() {}"#,
     )
     .expect("annotation");
 
-    let graph = scan_repository(&root, &test_config()).expect("scan");
+    let (config, registry) = test_config_and_registry(&root);
+    let graph = scan_repository(&root, &config, &registry).expect("scan");
 
     assert_eq!(graph.documents.len(), 1);
     assert_eq!(graph.annotations.len(), 1);
@@ -219,7 +228,8 @@ title: Second
     )
     .expect("second doc");
 
-    let graph = scan_repository(root.path(), &test_config()).expect("scan");
+    let (config, registry) = test_config_and_registry(root.path());
+    let graph = scan_repository(root.path(), &config, &registry).expect("scan");
 
     assert_eq!(graph.documents.len(), 1);
     assert_eq!(graph.documents[0].path, PathBuf::from(".docs/a/first.md"));
@@ -241,7 +251,8 @@ fn returns_a_fatal_walk_error_for_inaccessible_nested_directories() {
     fs::create_dir_all(&blocked).expect("blocked dir");
     fs::set_permissions(&blocked, fs::Permissions::from_mode(0o000)).expect("chmod");
 
-    let error = scan_repository(root.path(), &test_config()).expect_err("walk error");
+    let (config, registry) = test_config_and_registry(root.path());
+    let error = scan_repository(root.path(), &config, &registry).expect_err("walk error");
 
     match error {
         crate::IndexerError::WalkEntry { path, .. } => {
@@ -276,13 +287,14 @@ title: Create order
     let unreadable = root.path().join("fixtures/unreadable.rs");
     fs::write(
         &unreadable,
-        r#"#[soul(id = "interaction.checkout.create-order", role = "backend")]
+        r#"#[soul(id = "interaction.checkout.create-order")]
 fn unreadable() {}"#,
     )
     .expect("unreadable file");
     fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o000)).expect("chmod");
 
-    let graph = scan_repository(root.path(), &test_config()).expect("scan");
+    let (config, registry) = test_config_and_registry(root.path());
+    let graph = scan_repository(root.path(), &config, &registry).expect("scan");
 
     assert_eq!(graph.documents.len(), 1);
     assert!(graph.diagnostics.iter().any(|diagnostic| {

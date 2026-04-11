@@ -1,44 +1,91 @@
-use crate::{
-    AnnotationError, AnnotationResult,
-    annotation::{
-        NormalizedAnnotation, insert_metadata_field, merge_metadata_json,
-        normalized_annotation_from_fields, parser::Parser, split_assignments,
+use soul_plugin_sdk::{
+    AnnotationError, AnnotationParser, AnnotationParser_TO, AnnotationResult, NormalizedAnnotation,
+    SoulPlugin, SoulPluginRef,
+    helpers::{
+        insert_metadata_field, merge_metadata_json, normalized_annotation_from_fields,
+        split_assignments,
     },
-    model::AnnotationSyntax,
 };
 
+use abi_stable::{
+    export_root_module,
+    prefix_type::PrefixTypeTrait,
+    sabi_trait::TD_Opaque,
+    std_types::{RBox, ROption, RResult, RStr, RString},
+};
 use serde_json::{Map, Value};
 
 // ---------------------------------------------------------------------------------------------- //
 
-pub(crate) struct CSharpParser;
+#[export_root_module]
+pub fn get_root_module() -> SoulPluginRef {
+    SoulPlugin { parser: new_parser }.leak_into_prefix()
+}
 
-impl Parser for CSharpParser {
-    fn extension(&self) -> &'static str {
-        "cs"
+extern "C" fn new_parser() -> AnnotationParser_TO<'static, RBox<()>> {
+    AnnotationParser_TO::from_value(CSharpParser, TD_Opaque)
+}
+
+// ---------------------------------------------------------------------------------------------- //
+
+struct CSharpParser;
+
+impl AnnotationParser for CSharpParser {
+    fn extension(&self) -> RString {
+        "cs".into()
     }
 
-    fn syntax(&self) -> AnnotationSyntax {
-        AnnotationSyntax::CSharpAttribute
+    fn syntax(&self) -> RString {
+        "csharp-attribute".into()
     }
 
-    fn parse_line(&self, line: &str) -> Option<AnnotationResult<NormalizedAnnotation>> {
+    fn parse_line(
+        &self,
+        line: RStr<'_>,
+    ) -> ROption<RResult<NormalizedAnnotation, AnnotationError>> {
         let trimmed = line.trim();
         if !trimmed.starts_with("[Soul(") {
-            return None;
+            return ROption::RNone;
         }
 
         if !trimmed.ends_with(")]") {
-            return Some(Err(AnnotationError::malformed()));
+            return ROption::RSome(RResult::RErr(AnnotationError::malformed()));
         }
 
         let payload = &trimmed["[Soul(".len()..trimmed.len() - 2];
-        Some(
-            parse_fields(payload)
-                .and_then(|fields| normalized_annotation_from_fields(fields, trimmed)),
-        )
+        let result = parse_fields(payload)
+            .and_then(|fields| normalized_annotation_from_fields(fields, trimmed));
+
+        ROption::RSome(match result {
+            Ok(ann) => RResult::ROk(ann),
+            Err(e) => RResult::RErr(e),
+        })
+    }
+
+    fn syntax_guidance(&self) -> RString {
+        r#"C# soul annotation syntax
+
+  Template:
+    [Soul("<id>")]
+
+  Placement: on the line immediately above the class, method, or type it annotates.
+
+  Example:
+    [Soul("interaction.checkout.create-order")]
+    public Task<Order> CreateOrder(...) { ... }
+
+  With metadata:
+    [Soul("interaction.checkout.create-order", MetadataJson = "{\"layer\":\"frontend\"}")]
+
+  Rules:
+  - The id is required and must be the first argument, as a quoted string
+  - Additional metadata is passed via MetadataJson as a JSON object string
+  - MetadataJson may appear at most once"#
+            .into()
     }
 }
+
+// ---------------------------------------------------------------------------------------------- //
 
 fn parse_fields(payload: &str) -> AnnotationResult<Map<String, Value>> {
     let mut segments = split_assignments(payload)?.into_iter();

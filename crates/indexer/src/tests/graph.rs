@@ -18,13 +18,11 @@ fn returns_matches_and_preserves_global_scan_diagnostics() {
         }],
         annotations: vec![CodeAnnotation {
             id: "interaction.checkout.create-order".to_string(),
-            role: Some("backend".to_string()),
             metadata: serde_json::Map::new(),
             path: PathBuf::from("fixtures/backend.rs"),
             line: 2,
-            syntax: AnnotationSyntax::RustAttribute,
-            raw: r#"#[soul(id = "interaction.checkout.create-order", role = "backend")]"#
-                .to_string(),
+            syntax: AnnotationSyntax("rust-attribute".to_string()),
+            raw: r#"#[soul(id = "interaction.checkout.create-order")]"#.to_string(),
         }],
         diagnostics: vec![Diagnostic {
             severity: DiagnosticSeverity::Error,

@@ -62,10 +62,9 @@ pub async fn write_index(root: &Path, graph: &SemanticGraph) -> IndexerResult<Pa
     for ann in &graph.annotations {
         let metadata = serde_json::to_string(&ann.metadata).unwrap_or_else(|_| "{}".to_string());
         sqlx::query(
-            "INSERT INTO annotations (id, role, metadata, path, line, syntax, raw) VALUES (?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO annotations (id, metadata, path, line, syntax, raw) VALUES (?, ?, ?, ?, ?, ?)"
         )
             .bind(&ann.id)
-            .bind(&ann.role)
             .bind(&metadata)
             .bind(ann.path.to_string_lossy().as_ref())
             .bind(ann.line as i64)
@@ -132,11 +131,10 @@ pub async fn load_graph(pool: &SqlitePool) -> IndexerResult<SemanticGraph> {
         });
     }
 
-    let ann_rows =
-        sqlx::query("SELECT id, role, metadata, path, line, syntax, raw FROM annotations")
-            .fetch_all(pool)
-            .await
-            .map_err(|e| IndexerError::index_db(dummy_path.clone(), e))?;
+    let ann_rows = sqlx::query("SELECT id, metadata, path, line, syntax, raw FROM annotations")
+        .fetch_all(pool)
+        .await
+        .map_err(|e| IndexerError::index_db(dummy_path.clone(), e))?;
 
     let mut annotations = Vec::new();
     for row in ann_rows {
@@ -145,14 +143,13 @@ pub async fn load_graph(pool: &SqlitePool) -> IndexerResult<SemanticGraph> {
         let metadata = serde_json::from_str(&metadata_str).unwrap_or_default();
         annotations.push(CodeAnnotation {
             id: row.get("id"),
-            role: row.get("role"),
             metadata,
             path: PathBuf::from(row.get::<String, _>("path")),
             line: row.get::<i64, _>("line") as usize,
             syntax: row
                 .get::<String, _>("syntax")
                 .parse()
-                .unwrap_or(AnnotationSyntax::RustAttribute),
+                .unwrap_or(AnnotationSyntax("rust-attribute".to_string())),
             raw: row.get("raw"),
         });
     }
@@ -203,13 +200,12 @@ pub async fn explain_from_index(pool: &SqlitePool, id: &str) -> IndexerResult<Ex
         });
     }
 
-    let ann_rows = sqlx::query(
-        "SELECT id, role, metadata, path, line, syntax, raw FROM annotations WHERE id = ?",
-    )
-    .bind(id)
-    .fetch_all(pool)
-    .await
-    .map_err(|e| IndexerError::index_db(dummy_path.clone(), e))?;
+    let ann_rows =
+        sqlx::query("SELECT id, metadata, path, line, syntax, raw FROM annotations WHERE id = ?")
+            .bind(id)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| IndexerError::index_db(dummy_path.clone(), e))?;
 
     let mut annotations = Vec::new();
     for row in ann_rows {
@@ -218,14 +214,13 @@ pub async fn explain_from_index(pool: &SqlitePool, id: &str) -> IndexerResult<Ex
         let metadata = serde_json::from_str(&metadata_str).unwrap_or_default();
         annotations.push(CodeAnnotation {
             id: row.get("id"),
-            role: row.get("role"),
             metadata,
             path: PathBuf::from(row.get::<String, _>("path")),
             line: row.get::<i64, _>("line") as usize,
             syntax: row
                 .get::<String, _>("syntax")
                 .parse()
-                .unwrap_or(AnnotationSyntax::RustAttribute),
+                .unwrap_or(AnnotationSyntax("rust-attribute".to_string())),
             raw: row.get("raw"),
         });
     }

@@ -1,0 +1,10 @@
+[package]
+name = "soul-plugin-sdk"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+abi_stable = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }

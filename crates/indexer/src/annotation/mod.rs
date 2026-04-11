@@ -1,31 +1,31 @@
-pub(crate) mod c_sharp;
-pub(crate) mod normalized_annotation;
-pub(crate) mod parser;
-pub(crate) mod rust;
+pub mod loader;
 
-pub(crate) use c_sharp::CSharpParser;
-pub(crate) use normalized_annotation::NormalizedAnnotation;
-pub(crate) use parser::Parser;
-pub(crate) use rust::RustParser;
+// ---------------------------------------------------------------------------------------------- //
+
+pub use loader::PluginRegistry;
+
+// ---------------------------------------------------------------------------------------------- //
 
 use crate::{
-    AnnotationError, AnnotationResult, IndexerResult,
-    model::{CodeAnnotation, Diagnostic, DiagnosticSeverity, ParseReport},
+    IndexerResult,
+    model::{AnnotationSyntax, CodeAnnotation, Diagnostic, DiagnosticSeverity, ParseReport},
 };
 
-use serde::de::{Deserializer, MapAccess, Visitor};
-use serde_json::{Map, Value};
-use std::{fmt, path::Path};
+use soul_plugin_sdk::NormalizedAnnotation;
 
-static RUST_ATTRIBUTE_PARSER: RustParser = RustParser;
-static CSHARP_ATTRIBUTE_PARSER: CSharpParser = CSharpParser;
-static PARSERS: &[&(dyn Parser + Sync)] = &[&RUST_ATTRIBUTE_PARSER, &CSHARP_ATTRIBUTE_PARSER];
+use abi_stable::std_types::{ROption, RResult};
+use std::path::Path;
 
 pub fn parse_annotations(
     path: &Path,
     input: &str,
+    registry: &PluginRegistry,
 ) -> IndexerResult<ParseReport<Vec<CodeAnnotation>>> {
-    let Some(parser) = parser_for_path(path) else {
+    let Some(parser) = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .and_then(|ext| registry.parser_for_extension(ext))
+    else {
         return Ok(ParseReport {
             value: Vec::new(),
             diagnostics: Vec::new(),
@@ -34,28 +34,27 @@ pub fn parse_annotations(
 
     let mut annotations = Vec::new();
     let mut diagnostics = Vec::new();
+    let syntax = AnnotationSyntax(parser.syntax().into());
 
     for (index, line) in input.lines().enumerate() {
-        let Some(parsed) = parser.parse_line(line) else {
-            continue;
-        };
-
-        match parsed {
-            Ok(annotation) => annotations.push(CodeAnnotation {
-                id: annotation.id,
-                role: annotation.role,
-                metadata: annotation.metadata,
-                path: path.to_path_buf(),
-                line: index + 1,
-                syntax: parser.syntax(),
-                raw: annotation.raw,
-            }),
-            Err(error) => diagnostics.push(Diagnostic {
-                severity: DiagnosticSeverity::Error,
-                path: path.to_path_buf(),
-                line: Some(index + 1),
-                message: error.to_string(),
-            }),
+        match parser.parse_line(line.into()) {
+            ROption::RNone => continue,
+            ROption::RSome(RResult::ROk(ann)) => {
+                annotations.push(normalized_to_code_annotation(
+                    ann,
+                    path.to_path_buf(),
+                    index + 1,
+                    syntax.clone(),
+                ));
+            }
+            ROption::RSome(RResult::RErr(e)) => {
+                diagnostics.push(Diagnostic {
+                    severity: DiagnosticSeverity::Error,
+                    path: path.to_path_buf(),
+                    line: Some(index + 1),
+                    message: e.message().into(),
+                });
+            }
         }
     }
 
@@ -65,144 +64,29 @@ pub fn parse_annotations(
     })
 }
 
-fn parser_for_path(path: &Path) -> Option<&'static (dyn Parser + Sync)> {
-    let ext = path.extension().and_then(|ext| ext.to_str())?;
-    PARSERS.iter().copied().find(|p| p.extension() == ext)
-}
-
-fn split_assignments(payload: &str) -> AnnotationResult<Vec<String>> {
-    let mut parts = Vec::new();
-    let mut current = String::new();
-    let mut in_string = false;
-    let mut escape = false;
-
-    for ch in payload.chars() {
-        if escape {
-            current.push(ch);
-            escape = false;
-            continue;
-        }
-
-        match ch {
-            '\\' if in_string => {
-                current.push(ch);
-                escape = true;
-            }
-            '"' => {
-                current.push(ch);
-                in_string = !in_string;
-            }
-            ',' if !in_string => {
-                let segment = current.trim();
-                if segment.is_empty() {
-                    return Err(AnnotationError::malformed());
-                }
-                parts.push(segment.to_string());
-                current = String::new();
-            }
-            _ => current.push(ch),
-        }
-    }
-
-    if in_string {
-        return Err(AnnotationError::malformed());
-    }
-
-    let tail = current.trim();
-    if tail.is_empty() {
-        if payload.trim().is_empty() {
-            return Ok(Vec::new());
-        }
-        if payload.trim_end().ends_with(',') {
-            return Ok(parts);
-        }
-        return Err(AnnotationError::malformed());
-    }
-
-    parts.push(tail.to_string());
-    Ok(parts)
-}
-
-fn insert_metadata_field(
-    fields: &mut Map<String, Value>,
-    key: String,
-    value: Value,
-) -> AnnotationResult<()> {
-    if fields.insert(key, value).is_some() {
-        return Err(AnnotationError::malformed());
-    }
-    Ok(())
-}
-
-fn merge_metadata_json(fields: &mut Map<String, Value>, json: &str) -> AnnotationResult<()> {
-    let metadata = parse_unique_json_object(json)?;
-
-    for (key, value) in metadata {
-        if key == "id" || fields.contains_key(&key) {
-            return Err(AnnotationError::malformed());
-        }
-        fields.insert(key, value);
-    }
-
-    Ok(())
-}
-
-fn normalized_annotation_from_fields(
-    mut fields: Map<String, Value>,
-    raw: &str,
-) -> AnnotationResult<NormalizedAnnotation> {
-    let id = take_trimmed_string(&mut fields, "id").ok_or_else(AnnotationError::missing_id)?;
-
-    let role = take_trimmed_string(&mut fields, "role");
-
-    Ok(NormalizedAnnotation {
-        id,
-        role,
-        metadata: fields,
-        raw: raw.to_string(),
-    })
-}
-
-fn parse_unique_json_object(json: &str) -> AnnotationResult<Map<String, Value>> {
-    struct UniqueObjectVisitor;
-
-    impl<'de> Visitor<'de> for UniqueObjectVisitor {
-        type Value = Map<String, Value>;
-
-        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-            formatter.write_str("a JSON object with unique property names")
-        }
-
-        fn visit_map<A>(self, mut map: A) -> std::result::Result<Self::Value, A::Error>
-        where
-            A: MapAccess<'de>,
-        {
-            let mut fields = Map::new();
-            while let Some((key, value)) = map.next_entry::<String, Value>()? {
-                if fields.insert(key, value).is_some() {
-                    return Err(serde::de::Error::custom("duplicate property name"));
-                }
-            }
-            Ok(fields)
-        }
-    }
-
-    let mut deserializer = serde_json::Deserializer::from_str(json);
-    let parsed = deserializer
-        .deserialize_map(UniqueObjectVisitor)
-        .map_err(|_| AnnotationError::malformed())?;
-    deserializer
-        .end()
-        .map_err(|_| AnnotationError::malformed())?;
-    Ok(parsed)
-}
-
-fn take_trimmed_string(fields: &mut Map<String, Value>, key: &str) -> Option<String> {
-    match fields.remove(key) {
-        Some(Value::String(value)) => {
-            let trimmed = value.trim();
-            (!trimmed.is_empty()).then(|| trimmed.to_string())
-        }
-        Some(_) | None => None,
+fn normalized_to_code_annotation(
+    annotation: NormalizedAnnotation,
+    path: std::path::PathBuf,
+    line: usize,
+    syntax: AnnotationSyntax,
+) -> CodeAnnotation {
+    let metadata: serde_json::Map<String, serde_json::Value> = annotation
+        .metadata
+        .into_iter()
+        .map(|entry| {
+            let key: String = entry.0.into();
+            let val_str: String = entry.1.into();
+            let value = serde_json::from_str::<serde_json::Value>(&val_str)
+                .unwrap_or(serde_json::Value::String(val_str));
+            (key, value)
+        })
+        .collect();
+    CodeAnnotation {
+        id: annotation.id.into(),
+        metadata,
+        path,
+        line,
+        syntax,
+        raw: annotation.raw.into(),
     }
 }

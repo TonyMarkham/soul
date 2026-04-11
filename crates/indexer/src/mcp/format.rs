@@ -41,13 +41,22 @@ pub fn document(doc: &Document) -> String {
 }
 
 pub fn annotation(ann: &CodeAnnotation) -> String {
-    format!(
-        "- {} (role: {}) @ {}:{}",
-        ann.id,
-        ann.role.as_deref().unwrap_or("(none)"),
-        ann.path.display(),
-        ann.line,
-    )
+    let meta: Vec<String> = ann
+        .metadata
+        .iter()
+        .map(|(k, v)| format!("{k}={}", v.as_str().unwrap_or(&v.to_string())))
+        .collect();
+    if meta.is_empty() {
+        format!("- {} @ {}:{}", ann.id, ann.path.display(), ann.line)
+    } else {
+        format!(
+            "- {} @ {}:{} [{}]",
+            ann.id,
+            ann.path.display(),
+            ann.line,
+            meta.join(", ")
+        )
+    }
 }
 
 pub fn gaps(graph: &SemanticGraph) -> String {
@@ -72,12 +81,7 @@ pub fn gaps(graph: &SemanticGraph) -> String {
     for id in &unlinked {
         out.push_str(&format!("  {id}\n"));
         for ann in graph.annotations.iter().filter(|a| a.id.as_str() == *id) {
-            out.push_str(&format!(
-                "    @ {}:{} (role: {})\n",
-                ann.path.display(),
-                ann.line,
-                ann.role.as_deref().unwrap_or("none"),
-            ));
+            out.push_str(&format!("    @ {}:{}\n", ann.path.display(), ann.line));
         }
     }
 

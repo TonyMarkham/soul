@@ -1,8 +1,10 @@
+pub mod plugin_entry;
 pub mod scan_config;
 pub mod soul_config;
 
 // ---------------------------------------------------------------------------------------------- //
 
+pub use plugin_entry::PluginEntry;
 pub use scan_config::ScanConfig;
 pub use soul_config::SoulConfig;
 

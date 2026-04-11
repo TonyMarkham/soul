@@ -1,26 +1,16 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AnnotationSyntax {
-    RustAttribute,
-    CSharpAttribute,
-}
+pub struct AnnotationSyntax(pub String);
 
 impl std::fmt::Display for AnnotationSyntax {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::RustAttribute => f.write_str("rust_attribute"),
-            Self::CSharpAttribute => f.write_str("csharp_attribute"),
-        }
+        f.write_str(&self.0)
     }
 }
 
 impl std::str::FromStr for AnnotationSyntax {
-    type Err = String;
+    type Err = std::convert::Infallible;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "rust_attribute" => Ok(Self::RustAttribute),
-            "csharp_attribute" => Ok(Self::CSharpAttribute),
-            other => Err(format!("unknown annotation syntax: `{other}`")),
-        }
+        Ok(Self(s.to_string()))
     }
 }
