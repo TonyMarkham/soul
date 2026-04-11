@@ -56,6 +56,20 @@ fn linked_doc<'g>(graph: &'g SemanticGraph, id: &str) -> Option<&'g Document> {
     graph.documents.iter().find(|d| d.id == id)
 }
 
+fn document_at<'g>(graph: &'g SemanticGraph, root: &Path, uri: &Uri) -> Option<&'g Document> {
+    let req_path = uri.to_file_path()?;
+    let req_path = req_path.canonicalize().unwrap_or(req_path.to_path_buf());
+    graph.documents.iter().find(|d| {
+        let abs = if d.path.is_absolute() {
+            d.path.clone()
+        } else {
+            root.join(&d.path)
+        };
+        let canon = abs.canonicalize().unwrap_or(abs);
+        canon == req_path
+    })
+}
+
 fn to_uri(root: &Path, path: &Path) -> Option<Uri> {
     let abs = if path.is_absolute() {
         path.to_path_buf()
@@ -119,17 +133,37 @@ impl LanguageServer for Server {
             return Ok(None);
         };
         let pos = params.text_document_position_params;
-        let Some(ann) = annotation_at(graph, &self.root, &pos.text_document.uri, pos.position.line)
-        else {
-            return Ok(None);
-        };
-        let mut md = format!("**{}**", ann.id);
-        if let Some(doc) = linked_doc(graph, &ann.id) {
+        let md = if let Some(ann) =
+            annotation_at(graph, &self.root, &pos.text_document.uri, pos.position.line)
+        {
+            let mut md = format!("**{}**", ann.id);
+            if let Some(doc) = linked_doc(graph, &ann.id) {
+                if let Some(title) = &doc.title {
+                    md.push_str(&format!("\n\n*{title}*"));
+                }
+                md.push_str(&format!("\n\n`{}`", doc.path.display()));
+            }
+            md
+        } else if let Some(doc) = document_at(graph, &self.root, &pos.text_document.uri) {
+            let mut md = format!("**{}**", doc.id);
             if let Some(title) = &doc.title {
                 md.push_str(&format!("\n\n*{title}*"));
             }
-            md.push_str(&format!("\n\n`{}`", doc.path.display()));
-        }
+            let locs: Vec<_> = graph
+                .annotations
+                .iter()
+                .filter(|a| a.id == doc.id)
+                .collect();
+            if !locs.is_empty() {
+                md.push_str(&format!("\n\n{} code location(s):", locs.len()));
+                for a in &locs {
+                    md.push_str(&format!("\n- `{}:{}`", a.path.display(), a.line));
+                }
+            }
+            md
+        } else {
+            return Ok(None);
+        };
         Ok(Some(Hover {
             contents: HoverContents::Markup(MarkupContent {
                 kind: MarkupKind::Markdown,
@@ -148,20 +182,48 @@ impl LanguageServer for Server {
             return Ok(None);
         };
         let pos = params.text_document_position_params;
-        let Some(ann) = annotation_at(graph, &self.root, &pos.text_document.uri, pos.position.line)
-        else {
-            return Ok(None);
+        let locations_from_id = |id: &str| -> Option<GotoDefinitionResponse> {
+            let locs: Vec<Location> = graph
+                .annotations
+                .iter()
+                .filter(|a| a.id == id)
+                .filter_map(|a| {
+                    let uri = to_uri(&self.root, &a.path)?;
+                    let line = (a.line as u32).saturating_sub(1);
+                    Some(Location {
+                        uri,
+                        range: Range {
+                            start: Position { line, character: 0 },
+                            end: Position { line, character: 0 },
+                        },
+                    })
+                })
+                .collect();
+            if locs.is_empty() {
+                None
+            } else {
+                Some(GotoDefinitionResponse::Array(locs))
+            }
         };
-        let Some(doc) = linked_doc(graph, &ann.id) else {
-            return Ok(None);
-        };
-        let Some(uri) = to_uri(&self.root, &doc.path) else {
-            return Ok(None);
-        };
-        Ok(Some(GotoDefinitionResponse::Scalar(Location {
-            uri,
-            range: Range::default(),
-        })))
+
+        if let Some(ann) =
+            annotation_at(graph, &self.root, &pos.text_document.uri, pos.position.line)
+        {
+            let Some(doc) = linked_doc(graph, &ann.id) else {
+                return Ok(None);
+            };
+            let Some(uri) = to_uri(&self.root, &doc.path) else {
+                return Ok(None);
+            };
+            Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                uri,
+                range: Range::default(),
+            })))
+        } else if let Some(doc) = document_at(graph, &self.root, &pos.text_document.uri) {
+            Ok(locations_from_id(&doc.id))
+        } else {
+            Ok(None)
+        }
     }
 
     async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
@@ -170,11 +232,15 @@ impl LanguageServer for Server {
             return Ok(None);
         };
         let pos = params.text_document_position;
-        let Some(ann) = annotation_at(graph, &self.root, &pos.text_document.uri, pos.position.line)
-        else {
+        let id = if let Some(ann) =
+            annotation_at(graph, &self.root, &pos.text_document.uri, pos.position.line)
+        {
+            ann.id.clone()
+        } else if let Some(doc) = document_at(graph, &self.root, &pos.text_document.uri) {
+            doc.id.clone()
+        } else {
             return Ok(None);
         };
-        let id = ann.id.clone();
         let locations: Vec<Location> = graph
             .annotations
             .iter()
