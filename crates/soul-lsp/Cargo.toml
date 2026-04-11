@@ -1,0 +1,16 @@
+[package]
+name = "soul-lsp"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "soul-lsp"
+path = "src/main.rs"
+
+[dependencies]
+tower-lsp-server = { workspace = true }
+tokio            = { workspace = true, features = ["io-std", "sync"] }
+clap             = { workspace = true }
+
+indexer          = { workspace = true }

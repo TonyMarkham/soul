@@ -93,6 +93,63 @@ packages/
 soul.toml.example       canonical config template
 ```
 
+## IDE Integration (RustRover / Rider via LSP4IJ)
+
+`soul-lsp` is a read-only LSP server that provides hover, go-to-definition, and find-references for Soul annotations directly in the editor.
+
+### Setup
+
+1. Build the server and copy it to `.soul/`:
+   ```bash
+   cargo build -p soul-lsp --release
+   cp target/release/soul-lsp .soul/soul-lsp
+   ```
+
+2. Install the **LSP4IJ** plugin from the JetBrains Marketplace.
+
+3. In the IDE: **Settings → Languages & Frameworks → Language Servers → [+]**
+   - **Name:** `Soul LSP`
+   - **Command:** `$PROJECT_DIR$/.soul/soul-lsp --root $PROJECT_DIR$`
+   - **Mappings:** add `Rust` file type
+
+4. Restart the IDE.
+
+### Project-level settings
+
+LSP4IJ stores per-project trace/debug overrides in `.idea/LanguageServersSettings.xml` (excluded from git via `.gitignore`). Reference content:
+
+**Path:** `.idea/LanguageServersSettings.xml`
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="LanguageServerSettingsState">
+    <state>
+      <map>
+        <entry key="ee4fae82-4292-4574-babe-88927ef47e40">
+          <value>
+            <LanguageServerDefinitionSettings>
+              <option name="debugPort" value="" />
+              <option name="errorReportingKind" value="in_log" />
+              <option name="serverTrace" value="verbose" />
+            </LanguageServerDefinitionSettings>
+          </value>
+        </entry>
+      </map>
+    </state>
+  </component>
+</project>
+```
+
+> The UUID key matches the server's generated ID in your IDE installation and will differ per machine.
+
+### Features
+
+| Gesture | Result |
+|---------|--------|
+| Hover over `#[soul(...)]` | Shows Soul ID, doc title, and path |
+| Cmd+Click / Go to Definition | Opens the linked Markdown spec |
+| Find Usages (LSP References) | Lists every annotation sharing the same ID across all languages |
+
 ## Running tests
 
 ```bash
