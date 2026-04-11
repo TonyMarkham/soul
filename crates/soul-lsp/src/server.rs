@@ -70,13 +70,28 @@ fn document_at<'g>(graph: &'g SemanticGraph, root: &Path, uri: &Uri) -> Option<&
     })
 }
 
+/// On Windows, `Path::canonicalize` returns extended-length UNC paths
+/// (`\\?\C:\…`).  `Uri::from_file_path` then percent-encodes the `?` and
+/// produces `file://///%3F/C%3A/…` instead of `file:///C:/…`.  Strip the
+/// prefix so the URI is well-formed before handing it back to the client.
+fn strip_unc_prefix(path: PathBuf) -> PathBuf {
+    #[cfg(windows)]
+    {
+        let s = path.to_string_lossy();
+        if let Some(stripped) = s.strip_prefix(r"\\?\") {
+            return PathBuf::from(stripped);
+        }
+    }
+    path
+}
+
 fn to_uri(root: &Path, path: &Path) -> Option<Uri> {
     let abs = if path.is_absolute() {
         path.to_path_buf()
     } else {
         root.join(path)
     };
-    let canon = abs.canonicalize().unwrap_or(abs);
+    let canon = strip_unc_prefix(abs.canonicalize().unwrap_or(abs));
     Uri::from_file_path(canon)
 }
 
