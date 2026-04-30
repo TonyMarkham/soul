@@ -12,15 +12,15 @@
       ".archive",
       ".claude"
   ]
-  excluded_dir_suffixes = ["Tests", ".Tests", "tests"]
+  excluded_dir_suffixes = ["Tests", ".Tests", "tests", ".tests"]
   excluded_bin_except_under = ["src"]
 
 # Plugins declare which file extensions they handle.
 # Paths are platform-specific (.dylib on macOS, .so on Linux, .dll on Windows).
 [[plugins]]
 language = "rust"
-path = "./.soul/plugins/rust.dylib"
+path = "./.soul/plugins/rust.so"
 
 [[plugins]]
 language = "csharp"
-path = "./.soul/plugins/csharp.dylib"
+path = "./.soul/plugins/csharp.so"
