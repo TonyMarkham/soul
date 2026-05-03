@@ -7,7 +7,7 @@ use crate::{
     IndexerError, IndexerResult,
     annotation::{PluginRegistry, parse_annotations},
     config::SoulConfig,
-    markdown::parse_markdown,
+    markdown::{annotations::extract_annotations, parse_markdown},
     model::{Diagnostic, DiagnosticSeverity, SemanticGraph},
     scan::{candidate_kind::CandidateKind, scan_candidate::ScanCandidate},
 };
@@ -77,6 +77,10 @@ pub fn scan_repository(
                     graph.documents.push(document);
                 }
                 graph.diagnostics.extend(report.diagnostics);
+                // Also scan for HTML-comment annotations
+                let ann_report = extract_annotations(&candidate.display_path, &contents)?;
+                graph.annotations.extend(ann_report.value);
+                graph.diagnostics.extend(ann_report.diagnostics);
             }
             CandidateKind::AnnotationSource => {
                 let report = parse_annotations(&candidate.display_path, &contents, registry)?;

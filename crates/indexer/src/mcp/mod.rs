@@ -4,6 +4,8 @@ pub mod format;
 
 // ---------------------------------------------------------------------------------------------- //
 
+use soul_attributes::soul;
+
 use crate::{
     IndexerError, IndexerResult, SemanticGraph,
     annotation::PluginRegistry,
@@ -69,7 +71,8 @@ Recommended workflow:
 3. soul_list_gaps — find what is missing: undocumented code or unlinked specs
 4. soul_annotation_syntax — when adding an annotation to an unlinked file, look up its syntax first
 5. soul_explain <id> — read the detail for a specific ID and locate its code across all layers and languages
-6. Read the document file path returned by soul_explain to get the full written specification"
+6. Read the document file path returned by soul_explain to get the full written specification
+7. Reference .soul/templates/ for the doc template, audit rubric, gap-fill plan, and annotation syntax guide — use them as scaffolding for all doc and annotation work"
     )]
     async fn soul_index(&self) -> CallToolResult {
         self.soul_index_impl().await.unwrap_or_else(err_result)
@@ -106,11 +109,11 @@ Use this to explore what is documented in the repository and to discover IDs you
 
 Returns two lists:
 
-Unlinked annotations: IDs that appear in source code annotations but have no corresponding document. The code claims to implement something that has never been written up. These need documentation created. Note that an ID may have annotations in multiple languages (e.g. a Rust backend and a C# frontend) — an unlinked annotation means none of those implementations have a matching document yet.
+Unlinked annotations: IDs that appear in source code annotations but have no corresponding document. The code claims to implement something that has never been written up. These need a document created using .soul/templates/doc-template.md. Note that an ID may have annotations in multiple languages (e.g. a Rust backend and a C# frontend) — an unlinked annotation means none of those implementations have a matching document yet.
 
-Undocumented IDs: IDs that appear in documents but have no corresponding annotation anywhere in the codebase. The specification exists but nothing in the code is linked to it — either the annotations are missing, or the code has not been written yet. Note: this tool detects complete absence only. If a feature has a Rust annotation but no C# annotation, it will NOT appear here. To check which layers are covered for a given ID, call soul_explain on it to see all annotation locations and any metadata attached to each.
+Undocumented IDs: IDs that appear in documents but have no corresponding annotation anywhere in the codebase. The specification exists but nothing in the code is linked to it — either the annotations are missing, or the code has not been written yet. Add annotations using the syntax guide at .soul/templates/annotation-syntax.md. Note: this tool detects complete absence only. If a feature has a Rust annotation but no C# annotation, it will NOT appear here. To check which layers are covered for a given ID, call soul_explain on it to see all annotation locations and any metadata attached to each.
 
-Use this as your starting point for documentation and coverage work. Pick an ID from either list, call soul_explain on it to see what exists across all layers and languages, then write the missing document or add the missing annotations.")]
+Use this as your starting point for documentation and coverage work. Pick an ID from either list, call soul_explain on it to see what exists across all layers and languages, then write the missing document (use .soul/templates/doc-template.md) or add the missing annotations (use .soul/templates/annotation-syntax.md).")]
     async fn soul_list_gaps(&self) -> CallToolResult {
         self.soul_list_gaps_impl().await.unwrap_or_else(err_result)
     }
@@ -121,6 +124,8 @@ Use this as your starting point for documentation and coverage work. Pick an ID 
 Use this when soul_list_gaps has identified an unlinked annotation or a file needs an annotation added, and you need to know the exact syntax for that language.
 
 Input: a file path (e.g. 'crates/foo/src/bar.rs') or a bare extension (e.g. '.rs' or 'rs'). Soul routes to the plugin registered for that extension and returns its syntax guidance: template, placement rule, and a minimal example.
+
+For .md files the syntax uses HTML comments — see .soul/templates/annotation-syntax.md for the full reference.
 
 If no plugin is registered for the extension, the tool returns an error naming the extension so you know the language is not currently supported."
     )]
@@ -191,6 +196,7 @@ impl SoulServer {
         ))]))
     }
 
+    #[soul(id = "indexer.markdown-annotations")]
     async fn soul_annotation_syntax_impl(
         &self,
         p: AnnotationSyntaxParams,
@@ -203,6 +209,23 @@ impl SoulServer {
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| t.to_string())
         };
+        if ext == "md" {
+            return Ok(CallToolResult::success(vec![Content::text(
+                r#"Markdown soul annotation syntax
+  Template:
+    <!-- soul id="<id>" -->
+  Placement: on its own line within any Markdown (.md) file.
+  Example:
+    <!-- soul id="interaction.checkout.create-order" layer="backend" -->
+  Rules:
+  - `id` is required; all other keys are optional metadata
+  - Values must be quoted strings: key="value" (space-separated)
+  - The annotation must occupy the entire trimmed line
+  - Single-line only
+  - Backslash escapes supported: \", \\, \n, \r, \t"#
+                    .to_string(),
+            )]));
+        }
         match self.registry.parser_for_extension(&ext) {
             Some(parser) => Ok(CallToolResult::success(vec![Content::text(
                 parser.syntax_guidance().to_string(),

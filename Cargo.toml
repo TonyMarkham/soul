@@ -15,11 +15,11 @@ repository = "https://github.com/TonyMarkham/soul"
 
 [workspace.dependencies]
 abi_stable       = { version = "0.11.3" }
-clap             = { version = "4.6.0", features = ["derive"] }
+clap             = { version = "4.6.1", features = ["derive"] }
 error-location   = { version = "0.1.0" }
 proc-macro2      = { version = "1.0.106" }
 quote            = { version = "1.0.45" }
-rmcp             = { version = "1.4.0", features = ["server", "transport-io"] }
+rmcp             = { version = "1.6.0", features = ["server", "transport-io"] }
 rusqlite         = { version = "0.39.0" }
 serde            = { version = "1.0.228", features = ["derive"] }
 serde_json       = { version = "1.0.149" }
@@ -28,7 +28,7 @@ sqlx             = { version = "0.8.6", features = ["sqlite", "runtime-tokio", "
 syn              = { version = "2.0.117", features = ["parsing", "full"] }
 tempfile         = { version = "3.27.0" }
 thiserror        = { version = "2.0.18" }
-tokio            = { version = "1.51.1", features = ["rt", "macros", "rt-multi-thread", "io-std", "sync"] }
+tokio            = { version = "1.52.1", features = ["rt", "macros", "rt-multi-thread", "io-std", "sync"] }
 toml             = { version = "0.9.8" }
 tower-lsp-server = { version = "0.23.0" }
 trybuild         = { version = "1.0.116" }

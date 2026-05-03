@@ -1,3 +1,4 @@
+pub(crate) mod annotations;
 pub(crate) mod frontmatter;
 pub(crate) mod frontmatter_block;
 

@@ -3,13 +3,13 @@ use std::{panic::Location, path::PathBuf, result::Result as StdResult};
 
 #[derive(Debug, thiserror::Error)]
 pub enum IndexerError {
-    #[error("root does not exist or is not a directory: {path}")]
+    #[error("root does not exist or is not a directory: {path} {location}")]
     InvalidRoot {
         path: PathBuf,
         location: ErrorLocation,
     },
 
-    #[error("failed to walk path {path}: {source}")]
+    #[error("failed to walk path {path}: {source} {location}")]
     WalkEntry {
         path: PathBuf,
         location: ErrorLocation,
@@ -17,13 +17,13 @@ pub enum IndexerError {
         source: std::io::Error,
     },
 
-    #[error("{message}")]
+    #[error("{message} {location}")]
     Cli {
         message: String,
         location: ErrorLocation,
     },
 
-    #[error("{location} failed to read config `{path}`: {source}")]
+    #[error("failed to read config `{path}`: {source} {location}")]
     ConfigRead {
         path: PathBuf,
         location: ErrorLocation,
@@ -31,7 +31,7 @@ pub enum IndexerError {
         source: std::io::Error,
     },
 
-    #[error("{location} failed to parse config `{path}`: {source}")]
+    #[error("failed to parse config `{path}`: {source} {location}")]
     ConfigParse {
         path: PathBuf,
         location: ErrorLocation,
@@ -39,7 +39,7 @@ pub enum IndexerError {
         source: Box<toml::de::Error>,
     },
 
-    #[error("{location} index db error at `{path}`: {source}")]
+    #[error("index db error at `{path}`: {source} {location}")]
     IndexDb {
         path: PathBuf,
         location: ErrorLocation,
@@ -47,14 +47,14 @@ pub enum IndexerError {
         source: sqlx::Error,
     },
 
-    #[error("{location} mcp error: {source}")]
+    #[error("mcp error: {source} {location}")]
     Mcp {
         location: ErrorLocation,
         #[source]
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
-    #[error("{location} failed to load plugin `{language}` from `{path}`: {message}")]
+    #[error("failed to load plugin `{language}` from `{path}`: {message} {location}")]
     PluginLoadFailed {
         language: String,
         path: PathBuf,
@@ -62,17 +62,23 @@ pub enum IndexerError {
         location: ErrorLocation,
     },
 
-    #[error("{location} duplicate plugin language `{language}`")]
+    #[error("duplicate plugin language `{language}` {location}")]
     DuplicatePluginLanguage {
         language: String,
         location: ErrorLocation,
     },
 
-    #[error("{location} two plugins claim extension `{extension}`: `{first}` and `{second}`")]
+    #[error("two plugins claim extension `{extension}`: `{first}` and `{second}` {location}")]
     DuplicatePluginExtension {
         extension: String,
         first: String,
         second: String,
+        location: ErrorLocation,
+    },
+
+    #[error("malformed soul annotation: {message} {location}")]
+    AnnotationParse {
+        message: String,
         location: ErrorLocation,
     },
 }
@@ -162,6 +168,14 @@ impl IndexerError {
             extension,
             first,
             second,
+            location: ErrorLocation::from(Location::caller()),
+        }
+    }
+
+    #[track_caller]
+    pub fn annotation_parse(message: impl Into<String>) -> Self {
+        Self::AnnotationParse {
+            message: message.into(),
             location: ErrorLocation::from(Location::caller()),
         }
     }
