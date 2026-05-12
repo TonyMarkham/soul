@@ -30,6 +30,7 @@ pub async fn run(root: &Path, id: &str) -> IndexerResult<()> {
 fn print_result(result: &ExplainResult) {
     println!("ID: {}", result.id);
     println!();
+
     println!("Documents:");
     if result.documents.is_empty() {
         println!("none");
@@ -46,6 +47,7 @@ fn print_result(result: &ExplainResult) {
             }
         }
     }
+
     println!();
     println!("Annotations:");
     if result.annotations.is_empty() {
@@ -55,6 +57,35 @@ fn print_result(result: &ExplainResult) {
             println!("- {}:{}", ann.path.display(), ann.line);
         }
     }
+
+    println!();
+    println!("Referenced by:");
+    if result.references.is_empty() {
+        println!("none");
+    } else {
+        for reference in &result.references {
+            match &reference.display_text {
+                Some(display_text) => println!(
+                    "- {}:{}:{}-{} -> {} ({})",
+                    reference.source_path.display(),
+                    reference.source_start_line,
+                    reference.source_start_col,
+                    reference.source_end_col,
+                    reference.source_id,
+                    display_text
+                ),
+                None => println!(
+                    "- {}:{}:{}-{} -> {}",
+                    reference.source_path.display(),
+                    reference.source_start_line,
+                    reference.source_start_col,
+                    reference.source_end_col,
+                    reference.source_id
+                ),
+            }
+        }
+    }
+
     if !result.scan_diagnostics.is_empty() {
         println!();
         println!("Diagnostics:");

@@ -14,7 +14,7 @@ Space-separated `key="value"` pairs, HTML-attribute style. The annotation must o
 
 ## Why not a plugin
 
-`.md` files are already handled specially in the scanner (`classify_path` → `CandidateKind::Document`). A plugin claiming `.md` would conflict with YAML-frontmatter document parsing. Instead, annotation extraction is built directly into the existing markdown processing path.
+`.md` files are already handled specially in the scanner (`classify_path` → `CandidateKind::Document`). A plugin claiming `.md` would conflict with YAML-frontmatter document parsing. Instead, annotation extraction is built directly into [[indexer.scan-repository|the existing markdown processing path]].
 
 ## Implementation plan
 

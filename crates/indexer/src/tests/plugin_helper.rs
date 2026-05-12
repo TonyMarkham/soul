@@ -13,14 +13,16 @@ pub fn test_plugin_entries() -> Vec<PluginEntry> {
         PluginEntry {
             language: "rust".to_string(),
             path: target_dir.join(format!(
-                "libsoul_plugin_rust{}",
+                "{}soul_plugin_rust{}",
+                std::env::consts::DLL_PREFIX,
                 std::env::consts::DLL_SUFFIX
             )),
         },
         PluginEntry {
             language: "csharp".to_string(),
             path: target_dir.join(format!(
-                "libsoul_plugin_csharp{}",
+                "{}soul_plugin_csharp{}",
+                std::env::consts::DLL_PREFIX,
                 std::env::consts::DLL_SUFFIX
             )),
         },

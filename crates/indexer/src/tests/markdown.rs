@@ -16,7 +16,7 @@ title: Create order
     let report = parse_markdown(Path::new("checkout.md"), input).expect("parse");
 
     assert!(report.diagnostics.is_empty());
-    let document = report.value.expect("document");
+    let document = report.value.document.expect("document");
     assert_eq!(document.id, "interaction.checkout.create-order");
     assert_eq!(document.kind, "interaction");
     assert_eq!(document.title.as_deref(), Some("Create order"));
@@ -26,7 +26,7 @@ title: Create order
 fn ignores_markdown_without_frontmatter() {
     let report = parse_markdown(Path::new("plain.md"), "# Hello").expect("parse");
 
-    assert!(report.value.is_none());
+    assert!(report.value.document.is_none());
     assert!(report.diagnostics.is_empty());
 }
 
@@ -39,7 +39,7 @@ kind: interaction
 ";
     let report = parse_markdown(Path::new("bad.md"), input).expect("parse");
 
-    assert!(report.value.is_none());
+    assert!(report.value.document.is_none());
     assert_eq!(report.diagnostics.len(), 1);
     assert!(
         report.diagnostics[0]
@@ -59,7 +59,7 @@ title: Create order
     let report = parse_markdown(Path::new("checkout.md"), input).expect("parse");
 
     assert!(report.diagnostics.is_empty());
-    let document = report.value.expect("document");
+    let document = report.value.document.expect("document");
     assert_eq!(document.id, "interaction.checkout.create-order");
     assert_eq!(document.kind, "interaction");
     assert_eq!(document.title.as_deref(), Some("Create order"));
@@ -75,7 +75,7 @@ kind: interaction
 ";
     let report = parse_markdown(Path::new("bad.md"), input).expect("parse");
 
-    assert!(report.value.is_none());
+    assert!(report.value.document.is_none());
     assert_eq!(report.diagnostics.len(), 1);
     assert!(
         report.diagnostics[0]
@@ -95,7 +95,7 @@ kind: interaction
 ";
     let report = parse_markdown(Path::new("bad.md"), input).expect("parse");
 
-    assert!(report.value.is_none());
+    assert!(report.value.document.is_none());
     assert_eq!(report.diagnostics.len(), 1);
     assert!(report.diagnostics[0].message.contains("duplicate"));
 }
@@ -109,7 +109,7 @@ title: Missing id
 ";
     let report = parse_markdown(Path::new("bad.md"), input).expect("parse");
 
-    assert!(report.value.is_none());
+    assert!(report.value.document.is_none());
     assert_eq!(report.diagnostics.len(), 1);
     assert!(report.diagnostics[0].message.contains("id"));
 }
@@ -124,7 +124,7 @@ kind: interaction
 ";
     let report = parse_markdown(Path::new("bad.md"), input).expect("parse");
 
-    assert!(report.value.is_none());
+    assert!(report.value.document.is_none());
     assert_eq!(report.diagnostics.len(), 1);
     assert!(
         report.diagnostics[0]
@@ -145,6 +145,6 @@ title: \" \"
     let report = parse_markdown(Path::new("checkout.md"), input).expect("parse");
 
     assert!(report.diagnostics.is_empty());
-    let document = report.value.expect("document");
+    let document = report.value.document.expect("document");
     assert_eq!(document.title, None);
 }

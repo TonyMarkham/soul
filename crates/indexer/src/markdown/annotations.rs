@@ -1,5 +1,6 @@
 use crate::{
     IndexerError, IndexerResult,
+    markdown::line_scanner::LineScanner,
     model::{AnnotationSyntax, CodeAnnotation, Diagnostic, DiagnosticSeverity, ParseReport},
 };
 
@@ -13,13 +14,20 @@ pub(crate) fn extract_annotations(
 ) -> IndexerResult<ParseReport<Vec<CodeAnnotation>>> {
     let mut annotations = Vec::new();
     let mut diagnostics = Vec::new();
+    let mut scanner = LineScanner::new();
     let syntax = AnnotationSyntax("markdown-comment".to_string());
     for (index, line) in input.lines().enumerate() {
-        let line_number = index + 1;
-        let trimmed = line.trim();
+        let scanned = scanner.scan_line(index + 1, line);
+        if !scanned.is_annotation_candidate() {
+            continue;
+        }
+
+        let line_number = scanned.line_number;
+        let trimmed = scanned.raw.trim();
         if trimmed.is_empty() {
             continue;
         }
+
         // Must start with <!-- and contain soul
         if !trimmed.starts_with("<!--") || !trimmed.contains("soul") {
             continue;

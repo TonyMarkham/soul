@@ -4,8 +4,6 @@ pub mod format;
 
 // ---------------------------------------------------------------------------------------------- //
 
-use soul_attributes::soul;
-
 use crate::{
     IndexerError, IndexerResult, SemanticGraph,
     annotation::PluginRegistry,
@@ -16,12 +14,15 @@ use crate::{
     scan_repository,
 };
 
+use soul_attributes::soul;
+
 use rmcp::{
     ServerHandler,
     handler::server::wrapper::Parameters,
     model::{CallToolResult, Content},
     tool, tool_handler, tool_router,
 };
+
 use std::{path::PathBuf, sync::Arc};
 
 fn err_result(e: impl std::fmt::Display) -> CallToolResult {
@@ -39,6 +40,7 @@ impl SoulServer {
         let root = root.into();
         let config = load_config(&root)?;
         let registry = Arc::new(PluginRegistry::load(&config.plugins, &root)?);
+
         Ok(Self { root, registry })
     }
 }
@@ -63,7 +65,7 @@ Because Soul is language-agnostic, a single ID links a specification document, a
 
 Prerequisites: the repository must have been initialised, which creates `.soul/soul.toml`. If soul_index returns a config error, run `.soul/indexer init` as a shell command in the repository root first, then retry.
 
-Run this tool at the start of a session, or any time documents or source files have changed. Returns a count of documents, annotations, and diagnostics found. Diagnostics are warnings about malformed annotations or unreadable files — they do not abort the scan, but a high count may indicate annotation syntax problems worth investigating.
+Run this tool at the start of a session, or any time documents or source files have changed. Returns a count of documents, annotations, references, and diagnostics found. Diagnostics are warnings about malformed annotations or unreadable files — they do not abort the scan, but a high count may indicate annotation syntax problems worth investigating.
 
 Recommended workflow:
 1. soul_index — build or refresh the index
@@ -80,13 +82,15 @@ Recommended workflow:
 
     #[tool(description = "Return everything Soul knows about a given ID.
 
-An ID is a dot-separated semantic identifier like `interaction.checkout.create-order`. The result has two sections:
+An ID is a dot-separated semantic identifier like `interaction.checkout.create-order`. The result has three sections:
 
 Documents: the **definition** — the authoritative specification for this ID. At most one per ID. Returns metadata only (kind, title, file path). This is NOT the full specification. Each document entry includes a prompt to read the file — follow it immediately using the Read tool to get the actual written specification. The specification body is the Markdown content after the YAML frontmatter block.
 
-Annotations: the **references** — every location in the codebase that implements or participates in this concept. Many per ID across any language or layer. Soul is language-agnostic: a Rust Axum route handler and a C# Blazor component can both carry the same ID, and soul_explain returns both. Consumers use metadata freely to tag layers, components, or anything else — Soul does not privilege any metadata key. Together, the full set of annotations for an ID gives you the complete cross-language, cross-layer picture of how a feature is realised — navigate to each file and line to read the implementation at each layer.
+Annotations: the **implementation locations** — every location in the codebase that implements or participates in this concept. Many per ID across any language or layer.
 
-If the ID does not exist, the tool returns a message saying no documents or annotations were found — verify the ID using soul_list_documents first. If no index exists yet, it falls back to a live scan.")]
+References: the **wiki-link backlinks** — Markdown wiki links from other Soul IDs that target this ID. These are separate from code annotations and show cross-document linkage.
+
+If the ID does not exist, the tool returns a message saying no documents, annotations, or references were found — verify the ID using soul_list_documents first. If no index exists yet, it falls back to a live scan.")]
     async fn soul_explain(&self, Parameters(p): Parameters<ExplainParams>) -> CallToolResult {
         self.soul_explain_impl(p).await.unwrap_or_else(err_result)
     }
@@ -148,9 +152,10 @@ impl SoulServer {
         let graph = scan_repository(&self.root, &config, &self.registry)?;
         write_index(&self.root, &graph).await?;
         Ok(CallToolResult::success(vec![Content::text(format!(
-            "Indexed {} documents, {} annotations, {} diagnostics.",
+            "Indexed {} documents, {} annotations, {} references, {} diagnostics.",
             graph.documents.len(),
             graph.annotations.len(),
+            graph.references.len(),
             graph.diagnostics.len()
         ))]))
     }

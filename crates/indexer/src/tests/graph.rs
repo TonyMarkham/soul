@@ -1,11 +1,11 @@
-use std::path::PathBuf;
-
 use crate::{
     graph::explain,
     model::{
         AnnotationSyntax, CodeAnnotation, Diagnostic, DiagnosticSeverity, Document, SemanticGraph,
     },
 };
+
+use std::path::PathBuf;
 
 #[test]
 fn returns_matches_and_preserves_global_scan_diagnostics() {
@@ -24,6 +24,17 @@ fn returns_matches_and_preserves_global_scan_diagnostics() {
             syntax: AnnotationSyntax("rust-attribute".to_string()),
             raw: r#"#[soul(id = "interaction.checkout.create-order")]"#.to_string(),
         }],
+        references: vec![crate::model::Reference {
+            source_id: "interaction.checkout.flow".to_string(),
+            target_id: "interaction.checkout.create-order".to_string(),
+            source_path: PathBuf::from(".docs/flows/checkout.md"),
+            source_start_line: 12,
+            source_start_col: 4,
+            source_end_line: 12,
+            source_end_col: 39,
+            display_text: Some("Create order".to_string()),
+        }],
+        markdown_sources: Vec::new(),
         diagnostics: vec![Diagnostic {
             severity: DiagnosticSeverity::Error,
             path: PathBuf::from("fixtures/bad.rs"),
@@ -37,6 +48,8 @@ fn returns_matches_and_preserves_global_scan_diagnostics() {
     assert_eq!(result.id, "interaction.checkout.create-order");
     assert_eq!(result.documents.len(), 1);
     assert_eq!(result.annotations.len(), 1);
+    assert_eq!(result.references.len(), 1);
+    assert_eq!(result.references[0].source_id, "interaction.checkout.flow");
     assert_eq!(result.scan_diagnostics.len(), 1);
 }
 
@@ -56,5 +69,6 @@ fn no_match_still_returns_global_scan_diagnostics() {
 
     assert!(result.documents.is_empty());
     assert!(result.annotations.is_empty());
+    assert!(result.references.is_empty());
     assert_eq!(result.scan_diagnostics.len(), 1);
 }

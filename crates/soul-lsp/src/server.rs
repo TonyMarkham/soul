@@ -1,18 +1,24 @@
 use indexer::{
-    CodeAnnotation, Document, SemanticGraph,
+    CodeAnnotation, Document, SemanticGraph, WikiLinkToken,
     index::{load_graph, open_index},
+    markdown::wikilink_at_position,
 };
 
-use std::path::{Path, PathBuf};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 use tokio::sync::RwLock;
 use tower_lsp_server::{
     Client, LanguageServer,
     jsonrpc::Result,
     ls_types::{
+        DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
         GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
         HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, Location,
         MarkupContent, MarkupKind, MessageType, OneOf, Position, Range, ReferenceParams,
-        ServerCapabilities, Uri,
+        ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
+        TextDocumentSyncOptions, Uri,
     },
 };
 
@@ -20,6 +26,7 @@ pub struct Server {
     client: Client,
     root: PathBuf,
     graph: RwLock<Option<SemanticGraph>>,
+    open_documents: RwLock<BTreeMap<Uri, String>>,
 }
 
 impl Server {
@@ -28,7 +35,32 @@ impl Server {
             client,
             root,
             graph: RwLock::new(None),
+            open_documents: RwLock::new(BTreeMap::new()),
         }
+    }
+
+    async fn wikilink_token_at_position(
+        &self,
+        uri: &Uri,
+        position: Position,
+    ) -> Option<WikiLinkToken> {
+        let open_documents = self.open_documents.read().await;
+        let text = open_documents.get(uri)?;
+        wikilink_at_position(
+            text,
+            (position.line as usize) + 1,
+            position.character as usize,
+        )
+    }
+
+    async fn resolved_id_at_position(
+        &self,
+        graph: &SemanticGraph,
+        uri: &Uri,
+        position: Position,
+    ) -> Option<String> {
+        let wikilink_token = self.wikilink_token_at_position(uri, position).await;
+        resolved_id_from_position_inputs(graph, &self.root, uri, position, wikilink_token)
     }
 }
 
@@ -70,6 +102,24 @@ fn document_at<'g>(graph: &'g SemanticGraph, root: &Path, uri: &Uri) -> Option<&
     })
 }
 
+pub(crate) fn resolved_id_from_position_inputs(
+    graph: &SemanticGraph,
+    root: &Path,
+    uri: &Uri,
+    position: Position,
+    wikilink_token: Option<WikiLinkToken>,
+) -> Option<String> {
+    if let Some(token) = wikilink_token {
+        return Some(token.target_id);
+    }
+
+    if let Some(annotation) = annotation_at(graph, root, uri, position.line) {
+        return Some(annotation.id.clone());
+    }
+
+    document_at(graph, root, uri).map(|document| document.id.clone())
+}
+
 /// On Windows, `Path::canonicalize` returns extended-length UNC paths
 /// (`\\?\C:\…`).  `Uri::from_file_path` then percent-encodes the `?` and
 /// produces `file://///%3F/C%3A/…` instead of `file:///C:/…`.  Strip the
@@ -102,6 +152,13 @@ impl LanguageServer for Server {
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
+                text_document_sync: Some(TextDocumentSyncCapability::Options(
+                    TextDocumentSyncOptions {
+                        open_close: Some(true),
+                        change: Some(TextDocumentSyncKind::FULL),
+                        ..Default::default()
+                    },
+                )),
                 ..Default::default()
             },
             ..Default::default()
@@ -140,6 +197,23 @@ impl LanguageServer for Server {
                     .await;
             }
         }
+    }
+
+    async fn did_open(&self, params: DidOpenTextDocumentParams) {
+        let mut open_documents = self.open_documents.write().await;
+        open_documents.insert(params.text_document.uri, params.text_document.text);
+    }
+
+    async fn did_change(&self, params: DidChangeTextDocumentParams) {
+        let mut open_documents = self.open_documents.write().await;
+        if let Some(change) = params.content_changes.last() {
+            open_documents.insert(params.text_document.uri, change.text.clone());
+        }
+    }
+
+    async fn did_close(&self, params: DidCloseTextDocumentParams) {
+        let mut open_documents = self.open_documents.write().await;
+        open_documents.remove(&params.text_document.uri);
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
@@ -246,17 +320,16 @@ impl LanguageServer for Server {
         let Some(graph) = guard.as_ref() else {
             return Ok(None);
         };
+
         let pos = params.text_document_position;
-        let id = if let Some(ann) =
-            annotation_at(graph, &self.root, &pos.text_document.uri, pos.position.line)
-        {
-            ann.id.clone()
-        } else if let Some(doc) = document_at(graph, &self.root, &pos.text_document.uri) {
-            doc.id.clone()
-        } else {
+        let Some(id) = self
+            .resolved_id_at_position(graph, &pos.text_document.uri, pos.position)
+            .await
+        else {
             return Ok(None);
         };
-        let locations: Vec<Location> = graph
+
+        let mut locations: Vec<Location> = graph
             .annotations
             .iter()
             .filter(|a| a.id == id)
@@ -272,6 +345,32 @@ impl LanguageServer for Server {
                 })
             })
             .collect();
+
+        locations.extend(
+            graph
+                .references
+                .iter()
+                .filter(|r| r.target_id == id)
+                .filter_map(|reference| {
+                    let uri = to_uri(&self.root, &reference.source_path)?;
+                    let start_line = (reference.source_start_line as u32).saturating_sub(1);
+                    let end_line = (reference.source_end_line as u32).saturating_sub(1);
+                    Some(Location {
+                        uri,
+                        range: Range {
+                            start: Position {
+                                line: start_line,
+                                character: reference.source_start_col as u32,
+                            },
+                            end: Position {
+                                line: end_line,
+                                character: reference.source_end_col as u32,
+                            },
+                        },
+                    })
+                }),
+        );
+
         Ok(if locations.is_empty() {
             None
         } else {

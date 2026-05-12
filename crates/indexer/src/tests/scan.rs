@@ -1,8 +1,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-
-use std::os::unix::fs::PermissionsExt;
 use tempfile::tempdir;
+
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 use crate::{
     annotation::PluginRegistry,

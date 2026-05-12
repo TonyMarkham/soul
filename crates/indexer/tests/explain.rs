@@ -13,13 +13,19 @@ fn write_test_config(root: &std::path::Path) {
         .join("target/debug");
 
     let rust_lib = target_dir.join(format!(
-        "libsoul_plugin_rust{}",
+        "{}soul_plugin_rust{}",
+        std::env::consts::DLL_PREFIX,
         std::env::consts::DLL_SUFFIX
     ));
+
     let csharp_lib = target_dir.join(format!(
-        "libsoul_plugin_csharp{}",
+        "{}soul_plugin_csharp{}",
+        std::env::consts::DLL_PREFIX,
         std::env::consts::DLL_SUFFIX
     ));
+
+    let rust_lib = rust_lib.display().to_string().replace('\\', "/");
+    let csharp_lib = csharp_lib.display().to_string().replace('\\', "/");
 
     let config = format!(
         "[scan]\n\
@@ -34,8 +40,8 @@ fn write_test_config(root: &std::path::Path) {
         [[plugins]]\n\
         language = \"csharp\"\n\
         path = \"{csharp_lib}\"\n",
-        rust_lib = rust_lib.display(),
-        csharp_lib = csharp_lib.display(),
+        rust_lib = rust_lib,
+        csharp_lib = csharp_lib,
     );
 
     fs::write(soul_dir.join("soul.toml"), config).expect("soul.toml");
@@ -125,7 +131,9 @@ title: Broken doc
 
     assert!(output.status.success());
 
-    let stdout = String::from_utf8(output.stdout).expect("stdout");
+    let stdout = String::from_utf8(output.stdout)
+        .expect("stdout")
+        .replace('\\', "/");
     let expected = "\
 ID: interaction.checkout.create-order
 
@@ -135,6 +143,9 @@ Documents:
 Annotations:
 - fixtures/backend.rs:3
 - fixtures/frontend.cs:5
+
+Referenced by:
+none
 
 Diagnostics:
 - .docs/interactions/bad.md frontmatter block is missing a closing `---` delimiter
@@ -169,6 +180,9 @@ Documents:
 none
 
 Annotations:
+none
+
+Referenced by:
 none
 ";
     assert_eq!(stdout, expected);

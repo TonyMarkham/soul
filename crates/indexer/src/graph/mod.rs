@@ -26,10 +26,18 @@ pub fn explain(graph: &SemanticGraph, id: &str) -> ExplainResult {
         .cloned()
         .collect();
 
+    let references = graph
+        .references
+        .iter()
+        .filter(|reference| reference.target_id == id)
+        .cloned()
+        .collect();
+
     ExplainResult {
         id: id.to_string(),
         documents,
         annotations,
+        references,
         scan_diagnostics: graph.diagnostics.clone(),
     }
 }

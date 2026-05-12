@@ -47,6 +47,13 @@ pub enum IndexerError {
         source: sqlx::Error,
     },
 
+    #[error("corrupt index at `{path}`: {message} {location}")]
+    IndexCorruption {
+        path: PathBuf,
+        message: String,
+        location: ErrorLocation,
+    },
+
     #[error("mcp error: {source} {location}")]
     Mcp {
         location: ErrorLocation,
@@ -78,6 +85,18 @@ pub enum IndexerError {
 
     #[error("malformed soul annotation: {message} {location}")]
     AnnotationParse {
+        message: String,
+        location: ErrorLocation,
+    },
+
+    #[error("malformed wiki link: {message} {location}")]
+    WikiLinkParse {
+        message: String,
+        location: ErrorLocation,
+    },
+
+    #[error("invalid frontmatter: {message} {location}")]
+    FrontmatterParse {
         message: String,
         location: ErrorLocation,
     },
@@ -137,6 +156,15 @@ impl IndexerError {
     }
 
     #[track_caller]
+    pub fn index_corruption(path: PathBuf, message: impl Into<String>) -> Self {
+        Self::IndexCorruption {
+            path,
+            message: message.into(),
+            location: ErrorLocation::from(Location::caller()),
+        }
+    }
+
+    #[track_caller]
     pub fn mcp(source: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::Mcp {
             location: ErrorLocation::from(Location::caller()),
@@ -175,6 +203,22 @@ impl IndexerError {
     #[track_caller]
     pub fn annotation_parse(message: impl Into<String>) -> Self {
         Self::AnnotationParse {
+            message: message.into(),
+            location: ErrorLocation::from(Location::caller()),
+        }
+    }
+
+    #[track_caller]
+    pub fn wikilink_parse(message: impl Into<String>) -> Self {
+        Self::WikiLinkParse {
+            message: message.into(),
+            location: ErrorLocation::from(Location::caller()),
+        }
+    }
+
+    #[track_caller]
+    pub fn frontmatter_parse(message: impl Into<String>) -> Self {
+        Self::FrontmatterParse {
             message: message.into(),
             location: ErrorLocation::from(Location::caller()),
         }

@@ -1,29 +1,47 @@
 pub(crate) mod annotations;
+pub(crate) mod fence_state;
 pub(crate) mod frontmatter;
 pub(crate) mod frontmatter_block;
+pub(crate) mod line_scanner;
+pub(crate) mod parse;
+pub(crate) mod scanned_line;
+pub(crate) mod wikilink_validation;
+pub(crate) mod wikilinks;
 
 // ---------------------------------------------------------------------------------------------- //
 
-use std::path::Path;
-
-use serde::de::{Deserializer as _, MapAccess, Visitor};
-use std::fmt;
-
 use crate::{
-    IndexerResult,
-    markdown::{frontmatter::Frontmatter, frontmatter_block::FrontmatterBlock},
+    IndexerError, IndexerResult,
+    markdown::{frontmatter::Frontmatter, frontmatter_block::FrontmatterBlock, parse::Parse},
     model::{Diagnostic, DiagnosticSeverity, Document, ParseReport},
 };
 
-pub fn parse_markdown(path: &Path, input: &str) -> IndexerResult<ParseReport<Option<Document>>> {
+use serde::de::{Deserializer as _, MapAccess, Visitor};
+use std::{fmt, path::Path};
+
+pub(crate) fn parse_markdown(path: &Path, input: &str) -> IndexerResult<ParseReport<Parse>> {
     let normalized = input.replace("\r\n", "\n");
     let report = match extract_frontmatter(&normalized) {
-        FrontmatterBlock::Absent => ParseReport {
-            value: None,
-            diagnostics: Vec::new(),
-        },
+        FrontmatterBlock::Absent {
+            body,
+            body_start_line,
+        } => {
+            let wiki_report = wikilinks::extract_wikilinks(path, body, body_start_line);
+            ParseReport {
+                value: Parse {
+                    document: None,
+                    wiki_links: wiki_report.value,
+                    wiki_link_diagnostics: wiki_report.diagnostics,
+                },
+                diagnostics: Vec::new(),
+            }
+        }
         FrontmatterBlock::Unterminated => ParseReport {
-            value: None,
+            value: Parse {
+                document: None,
+                wiki_links: Vec::new(),
+                wiki_link_diagnostics: Vec::new(),
+            },
             diagnostics: vec![Diagnostic {
                 severity: DiagnosticSeverity::Error,
                 path: path.to_path_buf(),
@@ -31,12 +49,20 @@ pub fn parse_markdown(path: &Path, input: &str) -> IndexerResult<ParseReport<Opt
                 message: "frontmatter block is missing a closing `---` delimiter".to_string(),
             }],
         },
-        FrontmatterBlock::Present(frontmatter_text) => {
-            let parsed = match parse_unique_frontmatter(frontmatter_text) {
+        FrontmatterBlock::Present {
+            frontmatter,
+            body,
+            body_start_line,
+        } => {
+            let parsed = match parse_unique_frontmatter(frontmatter) {
                 Ok(parsed) => parsed,
                 Err(error) => {
                     return Ok(ParseReport {
-                        value: None,
+                        value: Parse {
+                            document: None,
+                            wiki_links: Vec::new(),
+                            wiki_link_diagnostics: Vec::new(),
+                        },
                         diagnostics: vec![Diagnostic {
                             severity: DiagnosticSeverity::Error,
                             path: path.to_path_buf(),
@@ -49,21 +75,30 @@ pub fn parse_markdown(path: &Path, input: &str) -> IndexerResult<ParseReport<Opt
 
             match (parsed.id, parsed.kind) {
                 (Some(id), Some(kind)) if !id.trim().is_empty() && !kind.trim().is_empty() => {
+                    let wiki_report = wikilinks::extract_wikilinks(path, body, body_start_line);
                     ParseReport {
-                        value: Some(Document {
-                            id: id.trim().to_string(),
-                            kind: kind.trim().to_string(),
-                            title: parsed.title.and_then(|t| {
-                                let t = t.trim();
-                                (!t.is_empty()).then(|| t.to_string())
+                        value: Parse {
+                            document: Some(Document {
+                                id: id.trim().to_string(),
+                                kind: kind.trim().to_string(),
+                                title: parsed.title.and_then(|t| {
+                                    let t = t.trim();
+                                    (!t.is_empty()).then(|| t.to_string())
+                                }),
+                                path: path.to_path_buf(),
                             }),
-                            path: path.to_path_buf(),
-                        }),
+                            wiki_links: wiki_report.value,
+                            wiki_link_diagnostics: wiki_report.diagnostics,
+                        },
                         diagnostics: Vec::new(),
                     }
                 }
                 _ => ParseReport {
-                    value: None,
+                    value: Parse {
+                        document: None,
+                        wiki_links: Vec::new(),
+                        wiki_link_diagnostics: Vec::new(),
+                    },
                     diagnostics: vec![Diagnostic {
                         severity: DiagnosticSeverity::Error,
                         path: path.to_path_buf(),
@@ -80,23 +115,72 @@ pub fn parse_markdown(path: &Path, input: &str) -> IndexerResult<ParseReport<Opt
     Ok(report)
 }
 
+pub fn wikilink_at_position(
+    input: &str,
+    line: usize,
+    utf16_col: usize,
+) -> Option<crate::model::WikiLinkToken> {
+    let normalized = input.replace("\r\n", "\n");
+    let report = match extract_frontmatter(&normalized) {
+        FrontmatterBlock::Absent {
+            body,
+            body_start_line,
+        } => wikilinks::extract_wikilinks(std::path::Path::new(""), body, body_start_line),
+        FrontmatterBlock::Present {
+            body,
+            body_start_line,
+            ..
+        } => wikilinks::extract_wikilinks(std::path::Path::new(""), body, body_start_line),
+        FrontmatterBlock::Unterminated => ParseReport {
+            value: Vec::new(),
+            diagnostics: Vec::new(),
+        },
+    };
+
+    report.value.into_iter().find(|token| {
+        token.start_line == line
+            && token.end_line == line
+            && token.start_col <= utf16_col
+            && utf16_col < token.end_col
+    })
+}
+
 fn extract_frontmatter(input: &str) -> FrontmatterBlock<'_> {
     let Some(rest) = input.strip_prefix("---\n") else {
-        return FrontmatterBlock::Absent;
+        return FrontmatterBlock::Absent {
+            body: input,
+            body_start_line: 1,
+        };
     };
 
     if let Some(end) = rest.find("\n---\n") {
-        return FrontmatterBlock::Present(&rest[..end]);
+        let frontmatter = &rest[..end];
+        let body = &rest[end + "\n---\n".len()..];
+        let body_start_line = input[..input.len() - body.len()]
+            .chars()
+            .filter(|ch| *ch == '\n')
+            .count()
+            + 1;
+
+        return FrontmatterBlock::Present {
+            frontmatter,
+            body,
+            body_start_line,
+        };
     }
 
     if let Some(frontmatter) = rest.strip_suffix("\n---") {
-        return FrontmatterBlock::Present(frontmatter);
+        return FrontmatterBlock::Present {
+            frontmatter,
+            body: "",
+            body_start_line: input.lines().count() + 1,
+        };
     }
 
     FrontmatterBlock::Unterminated
 }
 
-fn parse_unique_frontmatter(frontmatter_text: &str) -> std::result::Result<Frontmatter, String> {
+fn parse_unique_frontmatter(frontmatter_text: &str) -> IndexerResult<Frontmatter> {
     struct UniqueMapVisitor;
 
     impl<'de> Visitor<'de> for UniqueMapVisitor {
@@ -125,7 +209,7 @@ fn parse_unique_frontmatter(frontmatter_text: &str) -> std::result::Result<Front
     let deserializer = serde_yaml::Deserializer::from_str(frontmatter_text);
     let raw_map = deserializer
         .deserialize_map(UniqueMapVisitor)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| IndexerError::frontmatter_parse(e.to_string()))?;
 
     let id = raw_map
         .get("id")
