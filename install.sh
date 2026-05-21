@@ -84,10 +84,10 @@ fi
 
 mkdir -p "$target_soul_dir"
 cp -R "$tmp_dir/extract/.soul/." "$target_soul_dir/"
-chmod 0755 "$target_soul_dir/soul" "$target_soul_dir/soul-lsp" 2>/dev/null || true
+chmod 0755 "$target_soul_dir/indexer" "$target_soul_dir/soul-lsp" 2>/dev/null || true
 
 if [ "$SKIP_OPENCODE_CONFIG" != "1" ]; then
-  python3 - "$CONFIG_PATH" "$target_soul_dir/soul" <<'PY'
+  python3 - "$CONFIG_PATH" "$target_soul_dir/indexer" <<'PY'
 import json
 import pathlib
 import shutil

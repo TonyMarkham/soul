@@ -117,7 +117,7 @@ if (-not $SkipOpencodeConfig) {
         throw "Refusing to overwrite non-object 'mcp' value in $ConfigPath"
     }
 
-    $soulExe = Join-Path $targetSoulDir "soul.exe"
+    $soulExe = Join-Path $targetSoulDir "indexer.exe"
     $soulMcp = [pscustomobject]@{
         type = "local"
         command = @($soulExe, "serve", "--root", ".")

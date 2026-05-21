@@ -48,7 +48,7 @@ check-windows-x64:
 archive-linux-x64: check-linux-x64 build
     rm -rf {{dist}}/soul-linux-x64 {{dist}}/soul-linux-x64.tar.gz
     mkdir -p {{dist}}/soul-linux-x64/.soul/plugins
-    cp target/release/indexer {{dist}}/soul-linux-x64/.soul/soul
+    cp target/release/indexer {{dist}}/soul-linux-x64/.soul/indexer
     cp target/release/soul-lsp {{dist}}/soul-linux-x64/.soul/soul-lsp
     cp .soul/.gitignore {{dist}}/soul-linux-x64/.soul/.gitignore
     cp -R .soul/templates {{dist}}/soul-linux-x64/.soul/templates
@@ -60,7 +60,7 @@ archive-linux-x64: check-linux-x64 build
 archive-macos-arm64: check-macos-arm64 build
     rm -rf {{dist}}/soul-macos-arm64 {{dist}}/soul-macos-arm64.tar.gz
     mkdir -p {{dist}}/soul-macos-arm64/.soul/plugins
-    cp target/release/indexer {{dist}}/soul-macos-arm64/.soul/soul
+    cp target/release/indexer {{dist}}/soul-macos-arm64/.soul/indexer
     cp target/release/soul-lsp {{dist}}/soul-macos-arm64/.soul/soul-lsp
     cp .soul/.gitignore {{dist}}/soul-macos-arm64/.soul/.gitignore
     cp -R .soul/templates {{dist}}/soul-macos-arm64/.soul/templates
@@ -72,7 +72,7 @@ archive-macos-arm64: check-macos-arm64 build
 archive-linux-arm64: check-linux-arm64 build
     rm -rf {{dist}}/soul-linux-arm64 {{dist}}/soul-linux-arm64.tar.gz
     mkdir -p {{dist}}/soul-linux-arm64/.soul/plugins
-    cp target/release/indexer {{dist}}/soul-linux-arm64/.soul/soul
+    cp target/release/indexer {{dist}}/soul-linux-arm64/.soul/indexer
     cp target/release/soul-lsp {{dist}}/soul-linux-arm64/.soul/soul-lsp
     cp .soul/.gitignore {{dist}}/soul-linux-arm64/.soul/.gitignore
     cp -R .soul/templates {{dist}}/soul-linux-arm64/.soul/templates
@@ -85,7 +85,7 @@ archive-windows-x64: check-windows-x64 build
     if (Test-Path -LiteralPath '{{dist}}\soul-windows-x64') { Remove-Item -LiteralPath '{{dist}}\soul-windows-x64' -Recurse -Force }
     if (Test-Path -LiteralPath '{{dist}}\soul-windows-x64.zip') { Remove-Item -LiteralPath '{{dist}}\soul-windows-x64.zip' -Force }
     New-Item -ItemType Directory -Path '{{dist}}\soul-windows-x64\.soul\plugins' -Force | Out-Null
-    Copy-Item 'target\release\indexer.exe' '{{dist}}\soul-windows-x64\.soul\soul.exe'
+    Copy-Item 'target\release\indexer.exe' '{{dist}}\soul-windows-x64\.soul\indexer.exe'
     Copy-Item 'target\release\soul-lsp.exe' '{{dist}}\soul-windows-x64\.soul\soul-lsp.exe'
     Copy-Item '.soul\.gitignore' '{{dist}}\soul-windows-x64\.soul\.gitignore'
     Copy-Item '.soul\templates' '{{dist}}\soul-windows-x64\.soul\templates' -Recurse

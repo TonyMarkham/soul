@@ -4,6 +4,56 @@ Soul is a semantic indexer that links documentation to the source code that impl
 
 Documents are Markdown files anywhere in the repository with a structured frontmatter header. Source files carry lightweight annotations in native language syntax. Soul ties them together by a shared `id`, so you can ask: _what documents describe this interaction, and where in the codebase is it implemented?_
 
+## Install from GitHub
+
+Run the installer from the root of the repository where you want Soul installed. The installer downloads the latest platform-specific GitHub Release asset, installs Soul into that repository's `.soul/` directory, and updates your global opencode config with `mcp.soul`.
+
+Windows PowerShell:
+
+```powershell
+$installer = Join-Path $env:TEMP "install-soul.ps1"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/TonyMarkham/soul/main/install.ps1" -OutFile $installer
+& $installer -Target (Get-Location).Path
+```
+
+Linux/macOS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/TonyMarkham/soul/main/install.sh | bash -s -- --target .
+```
+
+To install a specific release tag, pass `--version vX.Y.Z` on Linux/macOS or `-Version vX.Y.Z` on Windows.
+
+## Add Soul attributes to your code
+
+Soul discovers semantic IDs from lightweight attributes in your source code. Add the attribute package for each language you want Soul to scan.
+
+Rust:
+
+```bash
+cargo add soul-attributes
+```
+
+```rust
+use soul_attributes::soul;
+
+#[soul(id = "interaction.checkout.create-order", role = "backend")]
+pub fn create_order() { ... }
+```
+
+C#:
+
+```bash
+dotnet add package Soul.Attributes
+```
+
+```csharp
+using Soul.Attributes;
+
+[Soul("interaction.checkout.create-order", Role = "frontend")]
+public void CreateOrder() { ... }
+```
+
 ## How it works
 
 **Documents** are Markdown files with a frontmatter block:
