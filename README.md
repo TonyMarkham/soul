@@ -11,15 +11,13 @@ Run the installer from the root of the repository where you want Soul installed.
 Windows PowerShell:
 
 ```powershell
-$installer = Join-Path $env:TEMP "install-soul.ps1"
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/TonyMarkham/soul/main/install.ps1" -OutFile $installer
-& $installer -Target (Get-Location).Path
+irm https://raw.githubusercontent.com/TonyMarkham/soul/main/install.ps1 | iex
 ```
 
 Linux/macOS:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/TonyMarkham/soul/main/install.sh | bash -s -- --target .
+curl -fsSL https://raw.githubusercontent.com/TonyMarkham/soul/main/install.sh | bash
 ```
 
 To install a specific release tag, pass `--version vX.Y.Z` on Linux/macOS or `-Version vX.Y.Z` on Windows.
