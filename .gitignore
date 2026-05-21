@@ -17,3 +17,6 @@ packages/**/[Oo]bj/
 
 # macOS
 .DS_Store
+
+# Publish
+dist/
