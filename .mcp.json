@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "soul": {
-      "type": "stdio",
-      "command": ".soul/indexer",
-      "args": ["serve", "--root", "."]
-    }
-  }
-}
