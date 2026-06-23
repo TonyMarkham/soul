@@ -14,11 +14,11 @@ use tower_lsp_server::{
     jsonrpc::Result,
     ls_types::{
         DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
-        GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
-        HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, Location,
-        MarkupContent, MarkupKind, MessageType, OneOf, Position, Range, ReferenceParams,
-        ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
-        TextDocumentSyncOptions, Uri,
+        DocumentSymbol, DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams,
+        GotoDefinitionResponse, Hover, HoverContents, HoverParams, HoverProviderCapability,
+        InitializeParams, InitializeResult, InitializedParams, Location, MarkupContent, MarkupKind,
+        MessageType, OneOf, Position, Range, ReferenceParams, ServerCapabilities, SymbolKind,
+        TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions, Uri,
     },
 };
 
@@ -70,18 +70,11 @@ fn annotation_at<'g>(
     uri: &Uri,
     line: u32,
 ) -> Option<&'g CodeAnnotation> {
-    let req_path = uri.to_file_path()?;
-    let req_path = req_path.canonicalize().unwrap_or(req_path.to_path_buf());
     let target = (line + 1) as usize;
-    graph.annotations.iter().find(|a| {
-        let abs = if a.path.is_absolute() {
-            a.path.clone()
-        } else {
-            root.join(&a.path)
-        };
-        let canon = abs.canonicalize().unwrap_or(abs);
-        canon == req_path && a.line == target
-    })
+    graph
+        .annotations
+        .iter()
+        .find(|a| path_matches_uri(root, uri, &a.path) && a.line == target)
 }
 
 fn linked_doc<'g>(graph: &'g SemanticGraph, id: &str) -> Option<&'g Document> {
@@ -89,17 +82,24 @@ fn linked_doc<'g>(graph: &'g SemanticGraph, id: &str) -> Option<&'g Document> {
 }
 
 fn document_at<'g>(graph: &'g SemanticGraph, root: &Path, uri: &Uri) -> Option<&'g Document> {
-    let req_path = uri.to_file_path()?;
+    graph
+        .documents
+        .iter()
+        .find(|d| path_matches_uri(root, uri, &d.path))
+}
+
+fn path_matches_uri(root: &Path, uri: &Uri, path: &Path) -> bool {
+    let Some(req_path) = uri.to_file_path() else {
+        return false;
+    };
     let req_path = req_path.canonicalize().unwrap_or(req_path.to_path_buf());
-    graph.documents.iter().find(|d| {
-        let abs = if d.path.is_absolute() {
-            d.path.clone()
-        } else {
-            root.join(&d.path)
-        };
-        let canon = abs.canonicalize().unwrap_or(abs);
-        canon == req_path
-    })
+    let abs = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        root.join(path)
+    };
+    let canon = abs.canonicalize().unwrap_or(abs);
+    canon == req_path
 }
 
 pub(crate) fn resolved_id_from_position_inputs(
@@ -145,6 +145,130 @@ fn to_uri(root: &Path, path: &Path) -> Option<Uri> {
     Uri::from_file_path(canon)
 }
 
+fn to_u32_saturating(value: usize) -> u32 {
+    u32::try_from(value).unwrap_or(u32::MAX)
+}
+
+fn indexed_line(line: usize) -> u32 {
+    to_u32_saturating(line.saturating_sub(1))
+}
+
+fn point_range(line: u32) -> Range {
+    Range {
+        start: Position { line, character: 0 },
+        end: Position { line, character: 0 },
+    }
+}
+
+fn indexed_line_range(line: usize) -> Range {
+    point_range(indexed_line(line))
+}
+
+#[allow(deprecated)]
+fn document_symbol_for_document(
+    document: &Document,
+    children: Vec<DocumentSymbol>,
+) -> DocumentSymbol {
+    let range = point_range(0);
+    DocumentSymbol {
+        name: document.id.clone(),
+        detail: document
+            .title
+            .clone()
+            .or_else(|| Some(document.kind.clone())),
+        kind: SymbolKind::FILE,
+        tags: None,
+        deprecated: None,
+        range,
+        selection_range: range,
+        children: if children.is_empty() {
+            None
+        } else {
+            Some(children)
+        },
+    }
+}
+
+#[allow(deprecated)]
+fn document_symbol_for_annotation(annotation: &CodeAnnotation) -> DocumentSymbol {
+    let range = indexed_line_range(annotation.line);
+    DocumentSymbol {
+        name: annotation.id.clone(),
+        detail: Some(annotation.syntax.to_string()),
+        kind: SymbolKind::OBJECT,
+        tags: None,
+        deprecated: None,
+        range,
+        selection_range: range,
+        children: None,
+    }
+}
+
+fn range_for_reference(reference: &indexer::Reference) -> Option<Range> {
+    if reference.source_end_line < reference.source_start_line {
+        return None;
+    }
+    if reference.source_end_line == reference.source_start_line
+        && reference.source_end_col < reference.source_start_col
+    {
+        return None;
+    }
+
+    Some(Range {
+        start: Position {
+            line: indexed_line(reference.source_start_line),
+            character: to_u32_saturating(reference.source_start_col),
+        },
+        end: Position {
+            line: indexed_line(reference.source_end_line),
+            character: to_u32_saturating(reference.source_end_col),
+        },
+    })
+}
+
+fn document_symbol_for_reference(reference: &indexer::Reference) -> Option<DocumentSymbol> {
+    let range = range_for_reference(reference)?;
+    let has_display_text = reference.display_text.is_some();
+    #[allow(deprecated)]
+    Some(DocumentSymbol {
+        name: reference
+            .display_text
+            .clone()
+            .unwrap_or_else(|| reference.target_id.clone()),
+        detail: has_display_text.then(|| reference.target_id.clone()),
+        kind: SymbolKind::STRING,
+        tags: None,
+        deprecated: None,
+        range,
+        selection_range: range,
+        children: None,
+    })
+}
+
+fn document_symbols_for_uri(graph: &SemanticGraph, root: &Path, uri: &Uri) -> Vec<DocumentSymbol> {
+    let annotations: Vec<DocumentSymbol> = graph
+        .annotations
+        .iter()
+        .filter(|annotation| path_matches_uri(root, uri, &annotation.path))
+        .map(document_symbol_for_annotation)
+        .collect();
+
+    let references: Vec<DocumentSymbol> = graph
+        .references
+        .iter()
+        .filter(|reference| path_matches_uri(root, uri, &reference.source_path))
+        .filter_map(document_symbol_for_reference)
+        .collect();
+
+    if let Some(document) = document_at(graph, root, uri) {
+        let mut children = annotations;
+        children.extend(references);
+        vec![document_symbol_for_document(document, children)]
+    } else {
+        annotations.into_iter().chain(references).collect()
+    }
+}
+
 impl LanguageServer for Server {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
         Ok(InitializeResult {
@@ -152,6 +276,7 @@ impl LanguageServer for Server {
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
+                document_symbol_provider: Some(OneOf::Left(true)),
                 text_document_sync: Some(TextDocumentSyncCapability::Options(
                     TextDocumentSyncOptions {
                         open_close: Some(true),
@@ -163,6 +288,20 @@ impl LanguageServer for Server {
             },
             ..Default::default()
         })
+    }
+
+    async fn document_symbol(
+        &self,
+        params: DocumentSymbolParams,
+    ) -> Result<Option<DocumentSymbolResponse>> {
+        let guard = self.graph.read().await;
+        let Some(graph) = guard.as_ref() else {
+            return Ok(None);
+        };
+
+        Ok(Some(DocumentSymbolResponse::Nested(
+            document_symbols_for_uri(graph, &self.root, &params.text_document.uri),
+        )))
     }
 
     async fn initialized(&self, _: InitializedParams) {
@@ -380,5 +519,162 @@ impl LanguageServer for Server {
 
     async fn shutdown(&self) -> Result<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use indexer::model::AnnotationSyntax;
+    use std::path::PathBuf;
+    use tower_lsp_server::{
+        LspService,
+        ls_types::{PartialResultParams, TextDocumentIdentifier, WorkDoneProgressParams},
+    };
+
+    fn test_root() -> PathBuf {
+        std::env::current_dir().expect("current dir")
+    }
+
+    fn lsp_service(root: PathBuf) -> LspService<Server> {
+        let (service, _) = LspService::new(|client| Server::new(client, root));
+        service
+    }
+
+    async fn lsp_service_with_graph(root: PathBuf, graph: SemanticGraph) -> LspService<Server> {
+        let service = lsp_service(root);
+        {
+            let mut guard = service.inner().graph.write().await;
+            *guard = Some(graph);
+        }
+        service
+    }
+
+    fn document(id: &str, path: &str) -> Document {
+        Document {
+            id: id.to_string(),
+            kind: "interaction".to_string(),
+            title: None,
+            path: PathBuf::from(path),
+        }
+    }
+
+    fn annotation(id: &str, path: &str, line: usize) -> CodeAnnotation {
+        CodeAnnotation {
+            id: id.to_string(),
+            metadata: Default::default(),
+            path: PathBuf::from(path),
+            line,
+            syntax: AnnotationSyntax("rust-attribute".to_string()),
+            raw: format!("#[soul(id = \"{id}\")]"),
+        }
+    }
+
+    fn document_symbol_params(root: &Path, path: &str) -> DocumentSymbolParams {
+        DocumentSymbolParams {
+            text_document: TextDocumentIdentifier {
+                uri: Uri::from_file_path(root.join(path)).expect("file uri"),
+            },
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default(),
+        }
+    }
+
+    fn nested_symbols(response: Option<DocumentSymbolResponse>) -> Vec<DocumentSymbol> {
+        match response.expect("document symbol response") {
+            DocumentSymbolResponse::Nested(symbols) => symbols,
+            DocumentSymbolResponse::Flat(_) => panic!("expected nested document symbols"),
+        }
+    }
+
+    async fn symbols_for(root: &Path, graph: SemanticGraph, path: &str) -> Vec<DocumentSymbol> {
+        let service = lsp_service_with_graph(root.to_path_buf(), graph).await;
+        nested_symbols(
+            service
+                .inner()
+                .document_symbol(document_symbol_params(root, path))
+                .await
+                .expect("document symbol request"),
+        )
+    }
+
+    #[tokio::test]
+    async fn initialize_advertises_document_symbols() {
+        let service = lsp_service(test_root());
+        let result = service
+            .inner()
+            .initialize(InitializeParams::default())
+            .await
+            .expect("initialize");
+
+        assert!(matches!(
+            result.capabilities.document_symbol_provider,
+            Some(OneOf::Left(true))
+        ));
+    }
+
+    #[tokio::test]
+    async fn document_file_returns_its_soul_id() {
+        let root = test_root();
+        let graph = SemanticGraph {
+            documents: vec![document(
+                "interaction.checkout.create-order",
+                "docs/checkout.md",
+            )],
+            ..Default::default()
+        };
+
+        let symbols = symbols_for(&root, graph, "docs/checkout.md").await;
+
+        assert_eq!(symbols.len(), 1);
+        assert_eq!(symbols[0].name, "interaction.checkout.create-order");
+        assert_eq!(symbols[0].kind, SymbolKind::FILE);
+    }
+
+    #[tokio::test]
+    async fn code_annotation_file_returns_annotation_ids() {
+        let root = test_root();
+        let graph = SemanticGraph {
+            annotations: vec![
+                annotation("interaction.checkout.create-order", "src/checkout.rs", 3),
+                annotation("policy.audit.log", "src/checkout.rs", 9),
+            ],
+            ..Default::default()
+        };
+
+        let symbols = symbols_for(&root, graph, "src/checkout.rs").await;
+        let names: Vec<&str> = symbols.iter().map(|symbol| symbol.name.as_str()).collect();
+
+        assert_eq!(
+            names,
+            vec!["interaction.checkout.create-order", "policy.audit.log"]
+        );
+        assert!(
+            symbols
+                .iter()
+                .all(|symbol| symbol.kind == SymbolKind::OBJECT)
+        );
+    }
+
+    #[tokio::test]
+    async fn unrelated_file_returns_empty_document_symbol_result() {
+        let root = test_root();
+        let graph = SemanticGraph {
+            documents: vec![document(
+                "interaction.checkout.create-order",
+                "docs/checkout.md",
+            )],
+            annotations: vec![annotation(
+                "interaction.checkout.create-order",
+                "src/checkout.rs",
+                3,
+            )],
+            ..Default::default()
+        };
+
+        let symbols = symbols_for(&root, graph, "src/unrelated.rs").await;
+
+        assert!(symbols.is_empty());
     }
 }
